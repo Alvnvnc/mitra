@@ -63,7 +63,9 @@ def whoami(token: str) -> None:
 
 
 def send(token: str, text: str) -> None:
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+    chat_id = (
+        os.environ.get("TELEGRAM_CHAT_ID") or os.environ.get("TELEGRAM_TARGET") or ""
+    ).strip()
     if not chat_id:
         print("ERROR: TELEGRAM_CHAT_ID is not set. Run --whoami first.")
         raise SystemExit(2)

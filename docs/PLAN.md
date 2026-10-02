@@ -35,7 +35,7 @@ which success metric does it improve? Features that cannot answer both are cut.
 
 ### W1 — Oct 2–9 — Foundation & problem validation
 - [ ] Claim credits: code `NEBIUS-DEVPOST-GLOBAL26` + Nebius Builders Program (+$25 + Tavily/AI Cloud credits)
-- [ ] Token Factory API key → `python scripts/smoke_test.py --all` responds for all 4 models
+- [x] Token Factory API key → `python scripts/smoke_test.py --all` responds for all 4 models (verified 2026-10-02: 4/4 OK, 0.7–2.1s)
 - [x] `git init` + public GitHub repo with MIT visible at top
 - [x] Dev env on laptop: `pip install -e ".[dev]"`, `pytest -q` green
 - [ ] Run the [validation scenarios S1–S5](VALIDATION_SCENARIOS.md); record baseline M1–M5 in `validation/observation_log.csv`
