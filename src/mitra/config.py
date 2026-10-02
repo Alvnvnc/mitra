@@ -8,9 +8,19 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[2]  # src/mitra/config.py -> repo root
+
+# Empty values in .env (e.g. "NEBIUS_BASE_URL=") must fall back to these defaults,
+# otherwise an empty string overrides the default and breaks API calls.
+_DEFAULT_WHEN_EMPTY = {
+    "nebius_base_url": "https://api.tokenfactory.nebius.com/v1/",
+    "mitra_model_fast": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+    "mitra_model_chat": "nvidia/nemotron-3-super-120b-a12b",
+    "mitra_model_reasoning": "nvidia/Nemotron-3-Ultra-550b-a55b",
+}
 
 
 class Settings(BaseSettings):
@@ -46,6 +56,13 @@ class Settings(BaseSettings):
             "chat": self.mitra_model_chat,
             "reasoning": self.mitra_model_reasoning,
         }
+
+    @field_validator(*_DEFAULT_WHEN_EMPTY, mode="before")
+    @classmethod
+    def _empty_means_default(cls, value: object, info) -> object:
+        if isinstance(value, str) and not value.strip():
+            return _DEFAULT_WHEN_EMPTY[info.field_name]
+        return value
 
 
 @lru_cache

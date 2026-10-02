@@ -24,7 +24,8 @@ except ModuleNotFoundError:  # dotenv is optional; env vars work too
 
 from openai import OpenAI
 
-BASE_URL = os.environ.get("NEBIUS_BASE_URL", "https://api.tokenfactory.nebius.com/v1/")
+DEFAULT_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
+BASE_URL = (os.environ.get("NEBIUS_BASE_URL") or "").strip() or DEFAULT_BASE_URL
 
 # (model id, role in Mitra's routing)
 MODELS = [
