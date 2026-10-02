@@ -3,10 +3,24 @@
 **Submission deadline: Oct 30, 2026, 10:00 PDT** (≈ Oct 31, 00:00 WIB). Judging
 Dec 1–15; winners announced Jan 11. Solo build, no physical hardware.
 
+## Problem (locked 2026-10-02)
+
+Users of a personal AI who delegate recurring commitments through conversation still carry the
+oversight burden: keeping instructions current, verifying that tasks actually ran, and chasing
+results or failures. This erodes the net benefit of delegation and lowers trust.
+
+- Full statement — scope, assumptions, objectives, metrics, falsification conditions:
+  [PROBLEM_STATEMENT.md](PROBLEM_STATEMENT.md) (Indonesian; English version before submission).
+- Supporting evidence: [COMMUNITY_RESEARCH.md](COMMUNITY_RESEARCH.md).
+
+**Alignment rule:** every feature must answer two questions — which cause does it address, and
+which success metric does it improve? Features that cannot answer both are cut.
+
 ## Locked decisions (2026-10-02)
 
 | Decision | Choice | Notes |
 |---|---|---|
+| Problem | Delegation oversight burden (locked 2026-10-02) | [PROBLEM_STATEMENT.md](PROBLEM_STATEMENT.md) |
 | Track | Personal AI | best fit; judges want memory across sessions + real actions |
 | Build approach | Full custom (no NemoClaw/Hermes) | we implement the policy/security layer ourselves |
 | Hosting | New VM on Nebius AI Cloud | always-on agent; inference on Token Factory |
@@ -66,6 +80,7 @@ Note: per the rules, a submission can win **(1 Overall Award OR 1 Track Award)
 
 | Risk | Mitigation |
 |---|---|
+| Problem hypothesis wrong | falsification conditions in [PROBLEM_STATEMENT.md](PROBLEM_STATEMENT.md); validate scenarios early in W1 |
 | Solo scope creep | weekly exit criteria; cut "nice" features, protect the demo path |
 | AI Cloud credits not granted | a small CPU VM is inexpensive; monitor billing; stop when idle until W3 |
 | Token budget | routing keeps personal-volume cost in the single-digit $/month range; cost dashboard proves it |

@@ -53,7 +53,7 @@ The web app and Telegram bot land in week 3 of the plan — watch [docs/PLAN.md]
 ## Repository layout
 
 ```
-docs/       architecture, plan, Nebius setup, submission drafts
+docs/       problem statement, community research, architecture, plan, Nebius setup
 scripts/    smoke_test.py (Token Factory connectivity check)
 src/mitra/  config, model router, (growing) memory / agent / interfaces
 tests/      unit tests
