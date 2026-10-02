@@ -6,6 +6,7 @@
 data/
 validation/observation_log.csv
 validation/private/
+evals/results/
 
 # Python
 __pycache__/

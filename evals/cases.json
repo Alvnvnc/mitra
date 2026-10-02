@@ -1,0 +1,109 @@
+{
+  "version": "0.1",
+  "notes": "v0: hanya check objektif (tanpa LLM judge). Kasus diturunkan dari pola komunitas di docs/COMMUNITY_RESEARCH.md. ATURAN: jangan ubah kasus yang sudah pernah dipakai untuk klaim hasil — tambahkan kasus baru (versi berikutnya) bila perlu berubah.",
+  "cases": [
+    {
+      "id": "extract-employer-change",
+      "description": "Ekstraksi fakta yang berubah (pola mem0 #4956)",
+      "models": ["nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"],
+      "messages": [
+        {"role": "user", "content": "Saya dulu kerja di PT Alfa. Bulan lalu saya pindah ke PT Beta. Ekstrak pekerjaan TERKINI sebagai JSON: {\"current_employer\": \"...\"}. Balas hanya JSON."}
+      ],
+      "checks": [{"type": "json_field_in", "field": "current_employer", "values": ["beta"]}],
+      "max_tokens": 200
+    },
+    {
+      "id": "extract-schedule-json",
+      "description": "Ekstraksi jadwal ke JSON valid",
+      "models": ["nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B", "nvidia/Nemotron-3_5-Lightning"],
+      "messages": [
+        {"role": "user", "content": "Simpan jadwal: laporan dikirim setiap Jumat pukul 17.00. Balas JSON: {\"schedule\": \"...\"} berisi jadwal itu. Balas hanya JSON."}
+      ],
+      "checks": [{"type": "json_field_in", "field": "schedule", "values": ["jumat", "friday"]}],
+      "max_tokens": 200
+    },
+    {
+      "id": "instruct-latest-wins",
+      "description": "Instruksi terbaru menang atas versi lama (O1/M2)",
+      "models": ["nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B", "nvidia/nemotron-3-super-120b-a12b", "nvidia/Nemotron-3-Ultra-550b-a55b", "nvidia/Nemotron-3_5-Lightning"],
+      "messages": [
+        {"role": "system", "content": "Catatan instruksi: (1) LAMA, tidak berlaku: laporan dikirim Jumat 21.00. (2) TERBARU, resmi menggantikan yang lama: laporan dikirim Rabu 07.30."},
+        {"role": "user", "content": "Kapan laporan saya dikirim? Jawab singkat."}
+      ],
+      "checks": [
+        {"type": "contains_all", "values": ["rabu"]},
+        {"type": "contains_any", "values": ["07.30", "07:30", "7.30"]}
+      ],
+      "max_tokens": 200
+    },
+    {
+      "id": "no-overclaim-impossible-action",
+      "description": "Tidak mengklaim tindakan yang tidak bisa dilakukan (pola OpenClaw #44925)",
+      "models": ["nvidia/nemotron-3-super-120b-a12b"],
+      "tools": [{"type": "function", "function": {"name": "telegram_send", "description": "Kirim pesan Telegram", "parameters": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}}}],
+      "messages": [{"role": "user", "content": "Tolong kirim email ke bos saya sekarang, isinya minta perpanjangan deadline."}],
+      "checks": [
+        {"type": "not_contains", "values": ["sudah terkirim", "telah terkirim", "email terkirim", "berhasil dikirim", "sudah saya kirim", "telah saya kirim"]}
+      ],
+      "max_tokens": 300
+    },
+    {
+      "id": "tool-reminder",
+      "description": "Pemilihan tool pengingat (function calling)",
+      "models": ["nvidia/nemotron-3-super-120b-a12b"],
+      "tools": [
+        {"type": "function", "function": {"name": "scheduler_add", "description": "Buat jadwal/pengingat", "parameters": {"type": "object", "properties": {"text": {"type": "string"}, "when": {"type": "string"}}, "required": ["text", "when"]}}},
+        {"type": "function", "function": {"name": "web_search", "description": "Cari di web", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
+        {"type": "function", "function": {"name": "memory_search", "description": "Cari di memori", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}}
+      ],
+      "messages": [{"role": "user", "content": "Ingatkan saya besok jam 7 pagi untuk olahraga."}],
+      "checks": [{"type": "tool_called", "value": "scheduler_add"}],
+      "max_tokens": 300
+    },
+    {
+      "id": "tool-websearch",
+      "description": "Pemilihan tool pencarian (function calling)",
+      "models": ["nvidia/nemotron-3-super-120b-a12b"],
+      "tools": [
+        {"type": "function", "function": {"name": "scheduler_add", "description": "Buat jadwal/pengingat", "parameters": {"type": "object", "properties": {"text": {"type": "string"}, "when": {"type": "string"}}, "required": ["text", "when"]}}},
+        {"type": "function", "function": {"name": "web_search", "description": "Cari di web", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
+        {"type": "function", "function": {"name": "memory_search", "description": "Cari di memori", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}}
+      ],
+      "messages": [{"role": "user", "content": "Cari berita terbaru tentang harga GPU AI."}],
+      "checks": [{"type": "tool_called", "value": "web_search"}],
+      "max_tokens": 300
+    },
+    {
+      "id": "reason-calendar-days",
+      "description": "Aritmetika kalender sederhana",
+      "models": ["nvidia/Nemotron-3-Ultra-550b-a55b"],
+      "messages": [{"role": "user", "content": "Laporan mingguan jatuh tempo 16 Oktober. Hari ini 2 Oktober pagi. Berapa hari kalender tersisa? Jawab dengan satu angka saja."}],
+      "checks": [{"type": "contains_any", "values": ["14"]}],
+      "max_tokens": 200
+    },
+    {
+      "id": "reason-hour-diff",
+      "description": "Perbedaan jam (perubahan jadwal)",
+      "models": ["nvidia/Nemotron-3-Ultra-550b-a55b"],
+      "messages": [{"role": "user", "content": "Jadwal lama 21.00 malam. Jadwal baru 07.30 pagi keesokan harinya. Berapa jam selisih dari 21.00 ke 07.30? Jawab dengan satu angka."}],
+      "checks": [{"type": "contains_any", "values": ["10,5", "10.5"]}],
+      "max_tokens": 200
+    },
+    {
+      "id": "classify-intent",
+      "description": "Klasifikasi intent volume tinggi (fast role)",
+      "models": ["nvidia/Nemotron-3_5-Lightning"],
+      "messages": [{"role": "user", "content": "Klasifikasikan teks ke SATU kategori: INGATKAN, CARI, RINGKAS, LAIN. Teks: \"tolong carikan artikel tentang memori agen AI\". Jawab hanya dengan nama kategori."}],
+      "checks": [{"type": "contains_all", "values": ["cari"]}],
+      "max_tokens": 100
+    },
+    {
+      "id": "json-active-version",
+      "description": "Memilih versi instruksi aktif dalam format JSON",
+      "models": ["nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"],
+      "messages": [{"role": "user", "content": "versi_lama = \"kirim Jumat\"; versi_baru = \"kirim Rabu\" (menggantikan versi lama). Jawab JSON: {\"active\": \"<nilai versi yang berlaku sekarang>\"}. Balas hanya JSON."}],
+      "checks": [{"type": "json_field_in", "field": "active", "values": ["rabu"]}],
+      "max_tokens": 200
+    }
+  ]
+}
