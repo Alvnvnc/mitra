@@ -33,13 +33,14 @@ which success metric does it improve? Features that cannot answer both are cut.
 
 ## Milestones
 
-### W1 — Oct 2–9 — Foundation
+### W1 — Oct 2–9 — Foundation & problem validation
 - [ ] Claim credits: code `NEBIUS-DEVPOST-GLOBAL26` + Nebius Builders Program (+$25 + Tavily/AI Cloud credits)
 - [ ] Token Factory API key → `python scripts/smoke_test.py --all` responds for all 4 models
-- [ ] `git init` + public GitHub repo with MIT visible at top
-- [ ] Dev env on laptop: `pip install -e ".[dev]"`, `pytest -q` green
+- [x] `git init` + public GitHub repo with MIT visible at top
+- [x] Dev env on laptop: `pip install -e ".[dev]"`, `pytest -q` green
+- [ ] Run the [validation scenarios S1–S5](VALIDATION_SCENARIOS.md); record baseline M1–M5 in `validation/observation_log.csv`
 - [ ] Create the Nebius AI Cloud VM (CPU preset, Ubuntu 24.04, public IP) — can slip to W2
-- **Exit:** smoke test OK; repo public; VM reachable via SSH.
+- **Exit:** baseline recorded + decision gate passed; smoke test OK; repo public; VM reachable via SSH.
 
 ### W2 — Oct 10–16 — Memory core
 - [ ] Ledger schema + migrations; event ingestion (messages, tasks, tool calls)

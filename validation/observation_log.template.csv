@@ -1,0 +1,2 @@
+timestamp,scenario_id,event_type,task_ref,description,minutes_spent,evidence
+2026-10-03T09:00+07:00,S1,corrected_wrong_info,weekly-digest,"EXAMPLE ROW — assistant used the old deadline after I changed it in a new session; had to repeat the new date",3,"chat transcript 2026-10-03"
