@@ -124,6 +124,7 @@ class ModelRouter:
         temperature: float = 0.3,
         max_tokens: int | None = None,
         response_format: dict[str, Any] | None = None,
+        extra_body: dict[str, Any] | None = None,
     ) -> Any:
         """One chat completion; returns the OpenAI ChatCompletion object unchanged."""
         model = self.model_for(purpose)
@@ -138,6 +139,8 @@ class ModelRouter:
             kwargs["max_tokens"] = max_tokens
         if response_format is not None:
             kwargs["response_format"] = response_format
+        if extra_body is not None:
+            kwargs["extra_body"] = extra_body
 
         started = time.perf_counter()
         completion = self._client.chat.completions.create(**kwargs)

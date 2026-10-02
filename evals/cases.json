@@ -104,6 +104,61 @@
       "messages": [{"role": "user", "content": "versi_lama = \"kirim Jumat\"; versi_baru = \"kirim Rabu\" (menggantikan versi lama). Jawab JSON: {\"active\": \"<nilai versi yang berlaku sekarang>\"}. Balas hanya JSON."}],
       "checks": [{"type": "json_field_in", "field": "active", "values": ["rabu"]}],
       "max_tokens": 200
+    },
+    {
+      "id": "extract-schedule-json-v2-response-format",
+      "description": "Perbaikan uji: response_format json_object (Lightning)",
+      "models": ["nvidia/Nemotron-3_5-Lightning"],
+      "messages": [
+        {"role": "user", "content": "Simpan jadwal: laporan dikirim setiap Jumat pukul 17.00. Balas JSON: {\"schedule\": \"...\"} berisi jadwal itu. Balas hanya JSON."}
+      ],
+      "response_format": {"type": "json_object"},
+      "checks": [{"type": "json_field_in", "field": "schedule", "values": ["jumat", "friday"]}],
+      "max_tokens": 400
+    },
+    {
+      "id": "extract-schedule-json-v3-guided-json",
+      "description": "Perbaikan uji: guided_json schema via extra_body (Lightning)",
+      "models": ["nvidia/Nemotron-3_5-Lightning"],
+      "messages": [
+        {"role": "user", "content": "Simpan jadwal: laporan dikirim setiap Jumat pukul 17.00. Balas JSON: {\"schedule\": \"...\"} berisi jadwal itu. Balas hanya JSON."}
+      ],
+      "extra_body": {"guided_json": {"type": "object", "properties": {"schedule": {"type": "string"}}, "required": ["schedule"]}},
+      "checks": [{"type": "json_field_in", "field": "schedule", "values": ["jumat", "friday"]}],
+      "max_tokens": 400
+    },
+    {
+      "id": "extract-schedule-json-v4-large-budget",
+      "description": "Perbaikan uji: budget token besar — apakah JSON muncul setelah thinking (Lightning)",
+      "models": ["nvidia/Nemotron-3_5-Lightning"],
+      "messages": [
+        {"role": "user", "content": "Simpan jadwal: laporan dikirim setiap Jumat pukul 17.00. Balas JSON: {\"schedule\": \"...\"} berisi jadwal itu. Balas hanya JSON."}
+      ],
+      "checks": [{"type": "json_field_in", "field": "schedule", "values": ["jumat", "friday"]}],
+      "max_tokens": 1600
+    },
+    {
+      "id": "extract-schedule-json-v5-strict-system",
+      "description": "Perbaikan uji: system prompt ketat + response_format (Lightning)",
+      "models": ["nvidia/Nemotron-3_5-Lightning"],
+      "messages": [
+        {"role": "system", "content": "You are a JSON API. Respond with a single JSON object and nothing else. Do not explain, do not show reasoning, do not add any text before or after the JSON."},
+        {"role": "user", "content": "Simpan jadwal: laporan dikirim setiap Jumat pukul 17.00. Balas JSON: {\"schedule\": \"...\"} berisi jadwal itu."}
+      ],
+      "response_format": {"type": "json_object"},
+      "checks": [{"type": "json_field_in", "field": "schedule", "values": ["jumat", "friday"]}],
+      "max_tokens": 800
+    },
+    {
+      "id": "extract-schedule-json-v6-disable-thinking",
+      "description": "Perbaikan uji: chat_template_kwargs enable_thinking=false (Lightning)",
+      "models": ["nvidia/Nemotron-3_5-Lightning"],
+      "messages": [
+        {"role": "user", "content": "Simpan jadwal: laporan dikirim setiap Jumat pukul 17.00. Balas JSON: {\"schedule\": \"...\"} berisi jadwal itu. Balas hanya JSON."}
+      ],
+      "extra_body": {"chat_template_kwargs": {"enable_thinking": false}},
+      "checks": [{"type": "json_field_in", "field": "schedule", "values": ["jumat", "friday"]}],
+      "max_tokens": 400
     }
   ]
 }

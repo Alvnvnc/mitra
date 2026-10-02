@@ -119,17 +119,26 @@ def main() -> int:
             }
             if "tools" in case:
                 kwargs["tools"] = case["tools"]
+            if "response_format" in case:
+                kwargs["response_format"] = case["response_format"]
+            if "extra_body" in case:
+                kwargs["extra_body"] = case["extra_body"]
             started = time.perf_counter()
             error = None
             text = ""
             tool_names: list[str] = []
+            finish_reason = None
+            has_reasoning_field = False
             prompt_tokens = completion_tokens = 0
             try:
                 resp = client.chat.completions.create(**kwargs)
                 latency = time.perf_counter() - started
-                message = resp.choices[0].message
+                choice = resp.choices[0]
+                message = choice.message
                 text = message.content or ""
                 tool_names = [tc.function.name for tc in (message.tool_calls or [])]
+                finish_reason = choice.finish_reason
+                has_reasoning_field = bool(getattr(message, "reasoning_content", None))
                 usage = resp.usage
                 prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
                 completion_tokens = getattr(usage, "completion_tokens", 0) or 0
@@ -156,6 +165,8 @@ def main() -> int:
                     "completion_tokens": completion_tokens,
                     "cost_usd": round(cost, 6),
                     "tool_calls": tool_names,
+                    "finish_reason": finish_reason,
+                    "has_reasoning_field": has_reasoning_field,
                     "response_excerpt": text.strip()[:220],
                 }
             )
