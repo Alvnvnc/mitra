@@ -5,6 +5,7 @@
 # App data (private memory)
 data/
 validation/observation_log.csv
+validation/private/
 
 # Python
 __pycache__/
