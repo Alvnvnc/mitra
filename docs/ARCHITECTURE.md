@@ -1,7 +1,9 @@
 # Mitra — Architecture
 
-Status: draft v0.1 (2026-10-02). This document is the contract for what we build
-during the four weeks of the hackathon. Update it when a decision changes.
+Status: draft v0.2 (2026-10-04) — aligned with `docs/PROBLEM_STATEMENT.md` v1.0
+(internal gap analysis R1–R6, 2026-10-02) + S1 findings. Pending the W1 validation
+gate before implementation. This document is the contract for the build; update it
+when a decision changes.
 
 ## 1. What this is
 
@@ -14,12 +16,31 @@ Hackathon hard rule: inference runs on **Nebius Token Factory** using **NVIDIA
 Nemotron** open models. Everything else is ours (this is a "full custom" build —
 no NemoClaw/Hermes; we implement the equivalent guarantees ourselves).
 
+The locked problem (`docs/PROBLEM_STATEMENT.md` v1.0) is the oversight burden:
+keeping instructions current, verifying execution, and chasing results. The
+architecture therefore treats the **commitment** (a recurring piece of delegated
+work) as the central unit and must keep three things true: only the current
+approved instructions are used, "done" claims carry verified evidence, and
+failures surface without the user asking.
+
+### Objective traceability
+
+| Objective (PROBLEM_STATEMENT §6) | Components |
+|---|---|
+| O1 current instructions | `commitments` + `instruction_versions`, scheduler resolve rule (§4) |
+| O2 evidence-bound claims | `task_runs` + `evidence` check before any completion claim (§4) |
+| O3 failures surface | delivery status separate from run status + push notifications, ≤1h target (§9, §11) |
+| O4 net benefit | intervention counters + maintenance time vs W1 baseline (§5, §9) |
+| O5 open infrastructure | model router → Nebius Token Factory, Nemotron family (§5) |
+
 ## 2. Design principles
 
 1. **Own the whole thing** — open weights, open code (MIT), user-owned data in
    inspectable formats (Markdown + SQLite), on a VM the user controls.
-2. **Memory is the product.** A chatbot with a system prompt is not a personal AI.
-   Memory layers + consolidation + corrections are the core differentiator.
+2. **Correct context, not just stored context.** Memory is a mechanism, not the
+   product. The product is fewer manual interventions: the assistant always
+   resolves the *current approved* instruction version, and when context is missing
+   it says so deterministically (S1 finding, 2026-10-02).
 3. **Write path ≠ read path.** Chat only *reads* memory. Memory is only *written*
    by the nightly consolidation job or by explicit user action — and consolidation
    proposals land in an approval inbox before being applied.
@@ -29,6 +50,10 @@ no NemoClaw/Hermes; we implement the equivalent guarantees ourselves).
    tools — approved. Deny by default.
 6. **Budget-aware routing.** Cheap models for volume, the big model only where it
    pays off, with live cost visibility.
+7. **No silent archaeology.** When context is missing, the agent admits it and asks.
+   It never hunts through the user's files, vaults, or stores to reconstruct
+   context (S1 finding, 2026-10-02: an agent searched a private vault instead of
+   asking).
 
 ## 3. Component map
 
@@ -68,7 +93,7 @@ no NemoClaw/Hermes; we implement the equivalent guarantees ourselves).
 | Layer | Store | Written by | Read by |
 |---|---|---|---|
 | Working | session buffer + rolling summary (`sessions/`) | every turn | every turn |
-| Episodic | `ledger.db`: events, messages, tasks, corrections, audit | capture hooks | retrieval |
+| Episodic | `ledger.db`: events, messages, commitments, instruction_versions, task_runs, evidence, corrections, audit | capture hooks | retrieval |
 | Embeddings | `ledger.db`: vectors as JSON blobs | capture hooks / consolidation | retrieval |
 | Semantic (self-model) | `self_model/*.md` (YAML frontmatter) | consolidation (approved), user edits | retrieval, dashboard |
 | Inbox | `inbox/` (proposed diffs, proposed skills) | consolidation, agent | user (approve/reject) |
@@ -97,11 +122,34 @@ window (last 24h events)
 ```
 
 Corrections from the user are first-class ledger events and always win; the
-consolidation job reads them and updates `preferences.md`.
+consolidation job reads them and updates `preferences.md` and the affected
+commitment definitions (`instruction_versions`).
 
 Optional stretch (only if time permits): run the consolidation job on
 **Nebius Serverless Jobs** instead of the VM cron — mentioned as encouraged in
 the hackathon track.
+
+### Commitments & instruction versions
+
+The central unit is a **commitment**: a recurring piece of delegated work
+(nightly digest, weekly report, follow-up). Data model (SQLite):
+
+| Table | Fields (essential) |
+|---|---|
+| `commitments` | id, title, schedule, skill, delivery channel, state |
+| `instruction_versions` | id, commitment_id, content, `effective_from`, `approved_by/at`, `source_event_ids`, `supersedes_id` |
+| `task_runs` | id, commitment_id, `instruction_version_id` used, run_at, state (`queued/running/done/failed/delivery_failed`), `evidence_id` |
+| `evidence` | id, run_id, kind (file/message/receipt), path/hash/summary, check result |
+
+Rules:
+
+- The scheduler **always resolves the latest approved instruction version** at run
+  time (O1/M2). No run may use a superseded version.
+- Urgent corrections can be approved synchronously (no waiting for the nightly
+  cycle); nightly consolidation stays for non-urgent proposals (R1).
+- A completion claim is only produced when the run has **evidence that passed its
+  check** (O2/M3).
+- Delivery is its own state: `done` ≠ `delivered` ≠ `read` (O3).
 
 ### Embeddings
 
@@ -125,12 +173,18 @@ not change.
   surfaced in dashboard stats.
 - Price table lives in code; refresh against `/api/public/models_info` when the
   catalog changes (non-blocking check).
+- Structured output (evals, 2026-10-02): Lightning requires
+  `extra_body={"chat_template_kwargs": {"enable_thinking": false}}` (cleanest fix:
+  19 output tokens vs 470/1113 alternatives); Nano is the safe default for
+  extraction.
 
 ## 6. Skills & tools
 
 - A **skill** = manifest (`skill.yaml`: name, description, params, required tools,
   risk) + implementation (`skill.py`) or procedural playbook (`SKILL.md`).
-- Built-in v1: `morning_brief`, `research_digest`, `memory_recall`, `journal`.
+- Built-in v1: `morning_brief`, `research_digest`, `memory_recall`,
+  `commitment_followup` (due/failed/undelivered states, ties to §4 tables).
+  `journal` → out of v1 scope (no problem-statement basis; candidate v2).
 - **Learned skills**: after a complex task the agent can *propose* a playbook draft
   (Markdown) into the inbox; approval saves it for reuse. Generated code is never
   auto-executed — by design.
@@ -147,12 +201,13 @@ not change.
 | Approval gates | risky actions (writes outside `data/`, shell exec, non-allowlisted egress) require approval via Telegram buttons / dashboard modal; timeout = deny |
 | Secrets discipline | keys read from env at execution time; never embedded in prompts or logs |
 | Audit | every tool call + approval decision recorded in SQLite; surfaced in the dashboard |
+| Context gaps | deterministic: state "unknown" and ask; searching user storage outside the declared allowlist is forbidden (S1 finding) |
 
 ## 8. Data layout
 
 ```
 data/                       (gitignored — private)
-  ledger.db                 events, messages, tasks, corrections, audit, embeddings
+  ledger.db                 events, messages, commitments, instruction_versions, task_runs, evidence, corrections, audit, embeddings
   self_model/               people.md, projects.md, priorities.md, preferences.md, patterns.md
   inbox/                    proposed memory diffs + proposed skills
   sessions/                 per-session snapshots / rolling summaries
@@ -166,8 +221,10 @@ Real personal data never appears in the public repo or demo.
 - **Telegram**: `/start`, `/brief`, `/memory <query>`, `/skills`; inline approval
   buttons; long answers stream via message edits.
 - **Web dashboard**: chat (SSE streaming) + **Memory Inspector** (timeline,
-  self-model pages, pending diffs) + Skills + Policy/Audit + Stats (routing,
-  latency, cost). Single-user token auth (demo account proxy for judges).
+  self-model pages, pending diffs) + **Commitments** (status, instruction history,
+  evidence, delivery) + Skills + Policy/Audit + Stats (routing, latency, cost,
+  interventions vs W1 baseline). Failure notifications are pushed (dashboard +
+  Telegram), target ≤1h (M4).
 
 ## 10. Deployment
 
@@ -180,16 +237,22 @@ Real personal data never appears in the public repo or demo.
 
 ## 11. Failure modes & mitigations
 
-| Failure | Mitigation |
-|---|---|
-| Token Factory latency/outage | retries (client `max_retries`), clear user-facing error, memory reads stay local |
-| Telegram API friction | web dashboard is the primary demo surface; bot is secondary |
-| VM restarts | compose restart policy; SQLite WAL mode; periodic backup of `data/` |
-| Model catalog changes | model ids configurable via env; smoke test catches drift |
-| Demo data privacy | synthetic seed only; `.gitignore` protects `data/` |
+| Failure | Stage (process/storage/delivery) | Mitigation |
+|---|---|---|
+| Scheduled run fails | process | recorded in `task_runs`; push notification ≤1h (M4); explicit retry policy |
+| Consolidation/storage fails | storage | transaction + WAL; failure event + push; no silent downgrade (community finding #49200) |
+| Result not delivered | delivery | delivery state + receipt; fallback notification lane; ≤1h target |
+| Approval timeout | process | pending item stays visible; reminder to a fallback lane; deny-by-default for risky actions |
+| Token Factory latency/outage | process | retries (client `max_retries`), clear user-facing error, memory reads stay local |
+| Telegram API friction | delivery | web dashboard is the primary demo surface; bot is secondary |
+| VM restarts | storage | compose restart policy; SQLite WAL mode; periodic backup of `data/` |
+| Model catalog changes | process | model ids configurable via env; smoke test catches drift |
+| Demo data privacy | storage | synthetic seed only; `.gitignore` protects `data/` |
 
 ## 12. Open questions
 
 - Embeddings now vs FTS5-only until W3 (fallback exists either way).
 - TLS on the VM: real domain via Caddy vs sslip.io-style hostname — decide in W3.
 - Final project name ("Mitra" is a working title).
+- W1 gate outcome may adjust §4 rules (S2/S4 data pending; interviews pending).
+- Notification lane for ≤1h failures: Telegram DM vs dashboard-first — decide in W2.
