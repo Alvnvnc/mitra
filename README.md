@@ -14,13 +14,13 @@ Most "personal AI" is a chat window with a system prompt and amnesia. Mitra is t
 - 🛠 **Reusable skills** — declarative skill manifests and playbooks; the assistant can propose new skills learned from your workflows.
 - ⚖️ **Budget-aware model routing** — [NVIDIA Nemotron](https://developer.nvidia.com/topics/ai/Nemotron) via **Nebius Token Factory**: Nano for high-volume extraction, Super for everyday chat + tool calling, Ultra for hard planning. Live cost/latency stats in the dashboard.
 - 🔐 **Governed tools, private data** — explicit tool/egress allowlists, approval prompts for risky actions, secrets never placed in prompts, full audit log. Your data stays in plain files on a VM you control (Nebius AI Cloud).
-- 💬 **Where you live** — Telegram bot + web dashboard (chat, memory inspector, skills, audit, stats).
+- 💬 **Where you live** — push notifications via ntfy.sh + web dashboard (chat, memory inspector, skills, audit, stats); Telegram bot optional.
 - 🔎 **Live web research** — [Tavily](https://tavily.com) as a runtime tool inside skills.
 
 ## How it works (short version)
 
 ```
-Telegram  /  Web dashboard
+ntfy push /  Web dashboard
         │
    interfaces (FastAPI)
         │
@@ -42,13 +42,13 @@ Prerequisites: Python 3.11+, a Nebius Token Factory API key ([setup guide](docs/
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-cp .env.example .env      # then set NEBIUS_API_KEY (and optionally TAVILY_API_KEY)
+cp .env.example .env      # set NEBIUS_API_KEY + NTFY_TOPIC (subscribe the topic in the ntfy app)
 
 python scripts/smoke_test.py --all   # verifies Nemotron connectivity + latency
 pytest -q                            # unit tests
 ```
 
-The web app and Telegram bot land in week 3 of the plan — watch [docs/PLAN.md](docs/PLAN.md).
+The web app (and the optional Telegram bot) land in week 3 of the plan — watch [docs/PLAN.md](docs/PLAN.md).
 
 ### Vertical slice (draft W2) — one complete commitment flow
 
@@ -69,7 +69,7 @@ still runs end-to-end; it simply shows the delivery stage failing loudly.
 
 ```
 docs/       problem statement, community research, architecture, plan, Nebius setup
-scripts/    smoke_test.py, telegram_ping.py (S2 baseline), demo_vertical_slice.py, run_scheduler.py
+scripts/    smoke_test.py, ntfy_ping.py (S2 baseline), telegram_ping.py (optional), demo_vertical_slice.py, run_scheduler.py
 src/mitra/  config, model router, ledger, runner, scheduler, skills, delivery
 tests/      unit tests (router + ledger invariants)
 ```

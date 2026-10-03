@@ -24,7 +24,7 @@ which success metric does it improve? Features that cannot answer both are cut.
 | Track | Personal AI | best fit; judges want memory across sessions + real actions |
 | Build approach | Full custom (no NemoClaw/Hermes) | we implement the policy/security layer ourselves |
 | Hosting | New VM on Nebius AI Cloud | always-on agent; inference on Token Factory |
-| Interfaces | Telegram + web dashboard | web dashboard is the judges' demo surface |
+| Interfaces | ntfy.sh push + web dashboard (Telegram bot optional) | web dashboard is the judges' demo surface |
 | License | MIT | visible at the top of the repo page |
 | Stack | Python 3.11+, FastAPI, SQLite (WAL), Docker Compose | |
 | Embeddings | Qwen3-Embedding-8B via Token Factory | fallback: FTS5 + recency only |
@@ -38,7 +38,7 @@ which success metric does it improve? Features that cannot answer both are cut.
 - [x] Token Factory API key → `python scripts/smoke_test.py --all` responds for all 4 models (verified 2026-10-02: 4/4 OK, 0.7–2.1s)
 - [x] `git init` + public GitHub repo with MIT visible at top
 - [x] Dev env on laptop: `pip install -e ".[dev]"`, `pytest -q` green
-- [ ] Run the [validation scenarios S1–S5](VALIDATION_SCENARIOS.md); record baseline M1–M5 in `validation/observation_log.csv` — progress: S1 ✅ (2026-10-02), S3 ✅ (2 runs), S5 🔄 running; S2/S4 blocked on the Telegram bot token
+- [ ] Run the [validation scenarios S1–S5](VALIDATION_SCENARIOS.md); record baseline M1–M5 in `validation/observation_log.csv` — progress: S1 ✅ (2026-10-02), S3 ✅ (2 runs), S5 🔄 running; S2/S4 unblocked via ntfy.sh (2026-10-04)
 - [ ] Create the Nebius AI Cloud VM (CPU preset, Ubuntu 24.04, public IP) — can slip to W2
 - **Exit:** baseline recorded + decision gate passed; smoke test OK; repo public; VM reachable via SSH.
 
@@ -52,7 +52,7 @@ which success metric does it improve? Features that cannot answer both are cut.
 - **Exit:** conversation persists across restarts; consolidation produces diffs; tests for memory + policy.
 
 ### W3 — Oct 17–23 — Always-on & interfaces
-- [ ] Telegram bot (commands, approvals, streaming)
+- [ ] Telegram bot — optional lane (commands, approvals, streaming)
 - [ ] Web dashboard: chat + Memory Inspector + Skills + Policy/Audit + Stats
 - [ ] Scheduler: morning brief 07:00, consolidation 23:30, weekly review Sunday
 - [ ] Docker Compose + TLS (Caddy) on the VM; restart policies
@@ -86,7 +86,7 @@ Note: per the rules, a submission can win **(1 Overall Award OR 1 Track Award)
 | AI Cloud credits not granted | a small CPU VM is inexpensive; monitor billing; stop when idle until W3 |
 | Token budget | routing keeps personal-volume cost in the single-digit $/month range; cost dashboard proves it |
 | Demo fragility | record the video on a stable build; canned fallback data |
-| Judges' environment blocks Telegram | web dashboard is the primary demo URL |
+| Judges' environment blocks Telegram | ntfy.sh push is the default lane; dashboard is the primary demo URL |
 
 ## Budget sketch (personal volume)
 

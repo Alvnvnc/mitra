@@ -68,8 +68,8 @@ tanpa harus memeriksa?
 **Sumber:** Hermes #112712 (tugas sukses tapi gagal kirim, tanpa pemberitahuan); OpenClaw #8298
 (reminder gagal senyap).
 
-**Prasyarat:** ada cara menjadwalkan tugas berulang ke kanal yang kamu pakai (bot Telegram
-pribadi, cron + AI, atau asisten komersial). Jika belum ada: catat "belum tersedia" dan
+**Prasyarat:** ada cara menjadwalkan tugas berulang ke kanal yang kamu pakai (push ntfy.sh,
+bot pribadi, cron + AI, atau asisten komersial). Jika belum ada: catat "belum tersedia" dan
 lanjutkan versi manual (kamu yang mengeksekusi, pengingat kalender biasa).
 
 **Langkah:**
@@ -122,9 +122,9 @@ suatu tempat yang tidak dibaca?
 **Sumber:** Hermes #112712 (topik Telegram dihapus → kirim gagal, operator tidak diberi tahu);
 OpenClaw #44925 (announce gagal → hasil hilang).
 
-**Prasyarat:** kanal pengiriman (Telegram/WhatsApp/dll). Jangan sengaja merusak kanal produksi —
-gunakan kanal uji kecil yang boleh dirusak (mis. bot uji + grup uji yang lalu diarsipkan/di-mute),
-atau tunggu kegagalan nyata terjadi.
+**Prasyarat:** kanal pengiriman (ntfy.sh/Telegram/WhatsApp/dll). Jangan sengaja merusak kanal
+produksi — gunakan kanal uji kecil yang boleh dirusak (mis. topik ntfy khusus uji yang lalu
+di-unsubscribe, atau bot uji + grup uji yang diarsipkan), atau tunggu kegagalan nyata terjadi.
 
 **Langkah:**
 
@@ -184,8 +184,8 @@ Kategori intervensi untuk log:
 
 ## Wawancara partisipan (3–5 orang) — untuk F2/A1
 
-**Kriteria:** pernah/sedang memakai personal AI untuk pekerjaan berulang nyata (bot Telegram
-pribadi, ChatGPT/Claude dengan memori, agen self-hosted).
+**Kriteria:** pernah/sedang memakai personal AI untuk pekerjaan berulang nyata (push
+ntfy/Telegram pribadi, ChatGPT/Claude dengan memori, agen self-hosted).
 
 **Pertanyaan (berbasis kejadian terakhir, bukan opini umum):**
 

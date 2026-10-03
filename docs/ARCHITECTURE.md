@@ -11,8 +11,9 @@ changes.
 ## 1. What this is
 
 Mitra is a self-hosted, always-on personal AI. It runs on a VM the owner controls
-(Nebius AI Cloud), talks to its owner through Telegram and a web dashboard, keeps
-persistent memory that grows across sessions, executes reusable skills, and governs
+(Nebius AI Cloud), talks to its owner through a web dashboard and push
+notifications (ntfy.sh; a Telegram bot stays optional), keeps persistent memory
+that grows across sessions, executes reusable skills, and governs
 all tool access with an explicit policy layer.
 
 Hackathon hard rule: inference runs on **Nebius Token Factory** using **NVIDIA
@@ -63,7 +64,7 @@ failures surface without the user asking.
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │ Interfaces                                                     │
-│   Telegram bot            Web dashboard (FastAPI + SSE)        │
+│   Push: ntfy.sh (default) Web dashboard (FastAPI + SSE)        │
 └───────────────┬────────────────────────────┬───────────────────┘
                 │                            │
 ┌───────────────▼────────────────────────────▼───────────────────┐
@@ -196,15 +197,16 @@ not change.
   (Markdown) into the inbox; approval saves it for reuse. Generated code is never
   auto-executed — by design.
 - **Tools**: `web_search` (Tavily), `memory_search`, `memory_write` (only via
-  approved paths), `notes_read`, `scheduler_add`, `telegram_send`. Each tool
-  declares required egress hosts and a risk level.
+  approved paths), `notes_read`, `scheduler_add`, `notify_send` (ntfy.sh;
+  Telegram bot lane optional). Each tool declares required egress hosts and a
+  risk level.
 
 ## 7. Policy engine (our replacement for OpenShell)
 
 | Control | Implementation |
 |---|---|
 | Tool allowlist | session starts with an explicit tool set; unknown tool = denied |
-| Egress allowlist | single `http_client` wrapper; exact host match, HTTPS only: `api.tokenfactory.nebius.com`, `api.tavily.com`, `api.telegram.org` |
+| Egress allowlist | single `http_client` wrapper; exact host match, HTTPS only: `api.tokenfactory.nebius.com`, `api.tavily.com`, `ntfy.sh`, `api.telegram.org` (optional) |
 | Approval gates | risky actions (writes outside `data/`, shell exec, non-allowlisted egress) require approval via Telegram buttons / dashboard modal; timeout = deny |
 | Secrets discipline | keys read from env at execution time; never embedded in prompts or logs |
 | Audit | every tool call + approval decision recorded in SQLite; surfaced in the dashboard |
@@ -225,13 +227,14 @@ Real personal data never appears in the public repo or demo.
 
 ## 9. Interfaces
 
-- **Telegram**: `/start`, `/brief`, `/memory <query>`, `/skills`; inline approval
-  buttons; long answers stream via message edits.
+- **Push (default)**: ntfy.sh topic; receipt = ntfy message id (accepted ≠ read).
+- **Telegram bot (optional)**: `/start`, `/brief`, `/memory <query>`, `/skills`;
+  inline approval buttons; long answers stream via message edits.
 - **Web dashboard**: chat (SSE streaming) + **Memory Inspector** (timeline,
   self-model pages, pending diffs) + **Commitments** (status, instruction history,
   evidence, delivery) + Skills + Policy/Audit + Stats (routing, latency, cost,
   interventions vs W1 baseline). Failure notifications are pushed (dashboard +
-  Telegram), target ≤1h (M4).
+  ntfy push), target ≤1h (M4).
 
 ## 10. Deployment
 
@@ -251,7 +254,7 @@ Real personal data never appears in the public repo or demo.
 | Result not delivered | delivery | delivery state + receipt; fallback notification lane; ≤1h target |
 | Approval timeout | process | pending item stays visible; reminder to a fallback lane; deny-by-default for risky actions |
 | Token Factory latency/outage | process | retries (client `max_retries`), clear user-facing error, memory reads stay local |
-| Telegram API friction | delivery | web dashboard is the primary demo surface; bot is secondary |
+| Push lane failure (ntfy/Telegram) | delivery | delivery_failed + fallback NOTICE (≤1h); dashboard is the primary demo surface |
 | VM restarts | storage | compose restart policy; SQLite WAL mode; periodic backup of `data/` |
 | Model catalog changes | process | model ids configurable via env; smoke test catches drift |
 | Demo data privacy | storage | synthetic seed only; `.gitignore` protects `data/` |
@@ -262,4 +265,4 @@ Real personal data never appears in the public repo or demo.
 - TLS on the VM: real domain via Caddy vs sslip.io-style hostname — decide in W3.
 - Final project name ("Mitra" is a working title).
 - W1 gate outcome may adjust §4 rules (S2/S4 data pending; interviews pending).
-- Notification lane for ≤1h failures: Telegram DM vs dashboard-first — decide in W2.
+- Notification lane decided (2026-10-04): ntfy.sh default; Telegram bot stays optional.

@@ -95,12 +95,13 @@ commands; for a CPU VM use image family `ubuntu24.04-driverless`.
 - A small CPU VM is billed per hour — stop the VM when not in use until week 3.
 - Check **Billing** in the console; Builders Program credits should cover it.
 
-## 5. Telegram bot (needed in week 3 — can set up now)
+## 5. Push notifications — ntfy.sh (default) / Telegram bot (optional)
 
-1. Chat with **@BotFather** → `/newbot` → follow prompts.
-2. Save the token → `.env`: `TELEGRAM_BOT_TOKEN=...`.
-3. Send `/start` to your new bot once from your own account (so it can message
-   you proactively later).
+1. Default lane: set `NTFY_TOPIC=...` in `.env` (a secret topic name) and subscribe
+   that topic in the **ntfy** app or at `https://ntfy.sh/<topic>`. Test it:
+   `python scripts/ntfy_ping.py --text "halo"`.
+2. Optional Telegram bot lane: chat with **@BotFather** → `/newbot` → save the
+   token to `.env` (`TELEGRAM_BOT_TOKEN=...`); send `/start` once to the bot.
 
 ## 6. Week-1 verification checklist
 
@@ -108,4 +109,4 @@ commands; for a CPU VM use image family `ubuntu24.04-driverless`.
 - [ ] `pytest -q` → green
 - [ ] SSH to the VM works
 - [ ] GitHub repo public, MIT license visible at the top of the page
-- [ ] `TAVILY_API_KEY` and `TELEGRAM_BOT_TOKEN` stored in `.env`
+- [ ] `TAVILY_API_KEY` and `NTFY_TOPIC` stored in `.env` (`TELEGRAM_BOT_TOKEN` optional)

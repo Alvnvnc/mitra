@@ -20,6 +20,7 @@ _DEFAULT_WHEN_EMPTY = {
     "mitra_model_fast": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
     "mitra_model_chat": "nvidia/nemotron-3-super-120b-a12b",
     "mitra_model_reasoning": "nvidia/Nemotron-3-Ultra-550b-a55b",
+    "ntfy_base_url": "https://ntfy.sh",
 }
 
 
@@ -40,7 +41,11 @@ class Settings(BaseSettings):
     mitra_model_reasoning: str = "nvidia/Nemotron-3-Ultra-550b-a55b"
 
     # --- Interfaces ---
-    telegram_bot_token: str = ""
+    telegram_bot_token: str = ""  # optional: Telegram bot lane (only if you use BotFather)
+
+    # --- Notifications (default push lane: ntfy.sh) ---
+    ntfy_topic: str = ""  # secret topic name; when empty, delivery fails loudly
+    ntfy_base_url: str = "https://ntfy.sh"
 
     # --- Tools ---
     tavily_api_key: str = ""

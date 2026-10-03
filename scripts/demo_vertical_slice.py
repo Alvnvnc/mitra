@@ -13,8 +13,8 @@ Menunjukkan tiga janji (draf W2, menunggu gate W1):
 Jalankan:
     .venv/bin/python scripts/demo_vertical_slice.py --fresh
 
-Tanpa TELEGRAM_BOT_TOKEN demo tetap berjalan penuh — justru memperlihatkan
-tahap pengiriman yang gagal secara eksplisit.
+Pengiriman memakai NTFY_TOPIC (ntfy.sh); kalau topik tidak diisi, tahap
+pengiriman gagal secara eksplisit (delivery_failed + NOTICE).
 """
 
 from __future__ import annotations
@@ -77,9 +77,9 @@ def main() -> int:
             skill="daily_digest",
             schedule="07:30",
             timezone_name="Asia/Jakarta",
-            delivery_channel="telegram",
+            delivery_channel="ntfy",
         )
-        print(f"komitmen dibuat: {commitment_id} (harian 07:30 WIB, kanal Telegram)")
+        print(f"komitmen dibuat: {commitment_id} (harian 07:30 WIB, kanal ntfy)")
 
     # 2) instruksi berversi ------------------------------------------------------
     _hr("2) Instruksi berversi (O1)")
@@ -173,8 +173,8 @@ def main() -> int:
     _hr("7) Biaya inferensi")
     print(router.stats.summary())
 
-    print("\nCatatan: tanpa TELEGRAM_BOT_TOKEN tahap pengiriman gagal dan itu TERLIHAT")
-    print("(delivery_failed + NOTICE). Setelah token diisi, jalur yang sama mengirim nyata.")
+    print("\nCatatan: pengiriman memakai NTFY_TOPIC (push ntfy.sh). Kalau topik kosong,")
+    print("kegagalan tetap TERLIHAT: delivery_failed + NOTICE — bukan senyap.")
     ledger.close()
     return 0
 

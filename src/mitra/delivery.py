@@ -73,6 +73,50 @@ def send_telegram(
     )
 
 
+def send_ntfy(
+    text: str,
+    *,
+    topic: str | None = None,
+    base_url: str | None = None,
+    title: str = "Mitra",
+    timeout: float = 30,
+) -> DeliveryResult:
+    """Default push lane: POST the text to an ntfy.sh topic.
+
+    The topic name *is* the secret (capability URL). The receipt is the ntfy
+    message id — evidence that the server accepted the message, not that the
+    user read it (same honesty rule as the Telegram lane).
+    """
+    settings = get_settings()
+    topic = topic if topic is not None else settings.ntfy_topic
+    topic = (topic or "").strip() or os.environ.get("NTFY_TOPIC", "").strip()
+    if not topic:
+        return DeliveryResult(False, "ntfy", error="NTFY_TOPIC belum diisi")
+
+    base = (base_url or settings.ntfy_base_url or "https://ntfy.sh").rstrip("/")
+    try:
+        response = httpx.post(
+            f"{base}/{topic}",
+            content=text.encode("utf-8"),
+            headers={"Title": title, "Tags": "robot"},
+            timeout=timeout,
+        )
+        if response.status_code == 200:
+            payload = response.json()
+            return DeliveryResult(
+                True,
+                "ntfy",
+                receipt={
+                    "id": payload.get("id"),
+                    "topic": payload.get("topic"),
+                    "time": payload.get("time"),
+                },
+            )
+        return DeliveryResult(False, "ntfy", error=f"ntfy http {response.status_code}")
+    except (httpx.HTTPError, ValueError) as exc:
+        return DeliveryResult(False, "ntfy", error=f"{type(exc).__name__}: {exc}")
+
+
 def deliver(
     channel: str,
     text: str,
@@ -84,6 +128,8 @@ def deliver(
         return sender(channel=channel, text=text)
     if channel == "telegram":
         return send_telegram(text)
+    if channel == "ntfy":
+        return send_ntfy(text)
     if channel == "outbox":
         return DeliveryResult(True, "outbox", receipt={"lane": "outbox"})
     return DeliveryResult(False, channel, error=f"kanal tidak dikenal: {channel!r}")
