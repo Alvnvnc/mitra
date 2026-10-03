@@ -12,6 +12,7 @@ Setup (1 minute):
 
 Usage:
     .venv/bin/python scripts/ntfy_ping.py --text "Uji S2 $(date +%F)"
+    .venv/bin/python scripts/ntfy_ping.py --daily --text "pesan pagi"   # dipakai timer harian
     .venv/bin/python scripts/ntfy_ping.py --cron-hint
 """
 
@@ -19,6 +20,8 @@ from __future__ import annotations
 
 import argparse
 import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 try:
     from dotenv import load_dotenv
@@ -60,6 +63,9 @@ def cron_hint(repo_dir: str, topic: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Baseline ntfy sender for validation S2/S4")
     parser.add_argument("--text", help="message text to send")
+    parser.add_argument(
+        "--daily", action="store_true", help="prefix message with today's date (timer harian)"
+    )
     parser.add_argument("--cron-hint", action="store_true", help="print a sample cron line")
     args = parser.parse_args()
 
@@ -70,7 +76,10 @@ def main() -> int:
         return 0
 
     if args.text:
-        send(_topic(), args.text)
+        text = args.text
+        if args.daily:
+            text = f"{datetime.now(tz=ZoneInfo('Asia/Jakarta')).strftime('%Y-%m-%d')} — {text}"
+        send(_topic(), text)
         return 0
 
     parser.print_help()
