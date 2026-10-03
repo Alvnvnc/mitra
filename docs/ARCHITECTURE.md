@@ -2,8 +2,11 @@
 
 Status: draft v0.2 (2026-10-04) — aligned with `docs/PROBLEM_STATEMENT.md` v1.0
 (internal gap analysis R1–R6, 2026-10-02) + S1 findings. Pending the W1 validation
-gate before implementation. This document is the contract for the build; update it
-when a decision changes.
+gate before implementation. The vertical slice (§4 commitments tables + runner +
+delivery) was implemented as a draft on 2026-10-03 at the user's request to
+de-risk W2; this does not waive the gate — validation data may still change the
+rules. This document is the contract for the build; update it when a decision
+changes.
 
 ## 1. What this is
 
@@ -177,6 +180,10 @@ not change.
   `extra_body={"chat_template_kwargs": {"enable_thinking": false}}` (cleanest fix:
   19 output tokens vs 470/1113 alternatives); Nano is the safe default for
   extraction.
+- Same setting applies to Super for routine digests (2026-10-03): with thinking
+  on, `finish_reason` was `length` at 800 tokens (reasoning ate the budget,
+  empty `content`); off → `stop`, 249 tokens, clean bullets. Keep thinking on
+  only for `reasoning`-purpose work.
 
 ## 6. Skills & tools
 

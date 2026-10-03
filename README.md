@@ -50,13 +50,28 @@ pytest -q                            # unit tests
 
 The web app and Telegram bot land in week 3 of the plan — watch [docs/PLAN.md](docs/PLAN.md).
 
+### Vertical slice (draft W2) — one complete commitment flow
+
+The first end-to-end flow is in place (draft; the W1 validation gate may still adjust rules):
+
+```bash
+.venv/bin/python scripts/demo_vertical_slice.py --fresh   # full flow, real Nemotron call
+.venv/bin/python scripts/run_scheduler.py --once          # scheduler tick (due commitments)
+```
+
+It demonstrates the three promises of the locked problem statement: **versioned instructions**
+(a change "starting tomorrow" does not apply today), an **evidence gate** ("done" is impossible
+without passed checks), and **delivery as a separate stage** (failed delivery becomes
+`delivery_failed` + a fallback `NOTICE` — never silent). Without `TELEGRAM_BOT_TOKEN` the demo
+still runs end-to-end; it simply shows the delivery stage failing loudly.
+
 ## Repository layout
 
 ```
 docs/       problem statement, community research, architecture, plan, Nebius setup
-scripts/    smoke_test.py (Token Factory connectivity check)
-src/mitra/  config, model router, (growing) memory / agent / interfaces
-tests/      unit tests
+scripts/    smoke_test.py, telegram_ping.py (S2 baseline), demo_vertical_slice.py, run_scheduler.py
+src/mitra/  config, model router, ledger, runner, scheduler, skills, delivery
+tests/      unit tests (router + ledger invariants)
 ```
 
 ## Hackathon notes

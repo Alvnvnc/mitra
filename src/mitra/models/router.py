@@ -11,8 +11,9 @@ Python client pointed at the Token Factory endpoint. The router has two jobs:
 from __future__ import annotations
 
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 from openai import OpenAI
 

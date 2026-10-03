@@ -82,8 +82,8 @@ def send(token: str, text: str) -> None:
 def cron_hint(repo_dir: str) -> None:
     print("Contoh baris cron (sesuaikan jam + path):")
     print(
-        "0 7 * * * cd '{}' && .venv/bin/python scripts/telegram_ping.py "
-        '--text "Uji S2 $(date +\\%F) - pesan pagi" >> /tmp/telegram_ping.log 2>&1'.format(repo_dir)
+        f"0 7 * * * cd '{repo_dir}' && .venv/bin/python scripts/telegram_ping.py "
+        '--text "Uji S2 $(date +\\%F) - pesan pagi" >> /tmp/telegram_ping.log 2>&1'
     )
 
 
