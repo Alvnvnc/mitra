@@ -107,6 +107,22 @@ CREATE INDEX IF NOT EXISTS idx_runs_commitment ON task_runs(commitment_id, run_a
 CREATE INDEX IF NOT EXISTS idx_evidence_run ON evidence(run_id);
 """
 
+# v1 additions (W2): conversation messages + full-text search over them.
+MESSAGES_SCHEMA = """
+CREATE TABLE IF NOT EXISTS messages (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id        TEXT NOT NULL,
+  role              TEXT NOT NULL,                 -- user | assistant | system
+  content           TEXT NOT NULL,
+  created_at        REAL NOT NULL,
+  meta              TEXT                           -- JSON
+);
+
+CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(content, message_id UNINDEXED);
+"""
+
 
 def _utcnow() -> float:
     return time.time()
@@ -184,6 +200,16 @@ class EvidenceItem:
     created_at: float
 
 
+@dataclass
+class Message:
+    id: int
+    session_id: str
+    role: str
+    content: str
+    created_at: float
+    meta: dict[str, Any]
+
+
 def _commitment(row: sqlite3.Row) -> Commitment:
     return Commitment(
         id=row["id"],
@@ -239,6 +265,17 @@ def _evidence(row: sqlite3.Row) -> EvidenceItem:
     )
 
 
+def _message(row: sqlite3.Row) -> Message:
+    return Message(
+        id=row["id"],
+        session_id=row["session_id"],
+        role=row["role"],
+        content=row["content"],
+        created_at=row["created_at"],
+        meta=json.loads(row["meta"] or "{}"),
+    )
+
+
 class Ledger:
     """Thin, explicit wrapper around one SQLite file. No ORM, on purpose."""
 
@@ -250,10 +287,18 @@ class Ledger:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.executescript(SCHEMA)
+        self._migrate()
         self._conn.commit()
 
     def close(self) -> None:
         self._conn.close()
+
+    def _migrate(self) -> None:
+        """Schema migrations via PRAGMA user_version — idempotent and additive."""
+        version = int(self._conn.execute("PRAGMA user_version").fetchone()[0])
+        if version < 1:
+            self._conn.executescript(MESSAGES_SCHEMA)
+            self._conn.execute("PRAGMA user_version = 1")
 
     # ------------------------------------------------------------------ events
 
@@ -534,6 +579,76 @@ class Ledger:
             "SELECT * FROM evidence WHERE run_id = ? ORDER BY id", (run_id,)
         ).fetchall()
         return [_evidence(r) for r in rows]
+
+    # --------------------------------------------------------------- messages
+
+    def log_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        *,
+        meta: dict[str, Any] | None = None,
+        at: datetime | float | None = None,
+    ) -> int:
+        """Capture one conversation message (ingestion hook for the memory core)."""
+        cursor = self._conn.execute(
+            "INSERT INTO messages (session_id, role, content, created_at, meta)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (
+                session_id,
+                role,
+                content,
+                _to_epoch(at),
+                json.dumps(meta, ensure_ascii=False) if meta else None,
+            ),
+        )
+        message_id = int(cursor.lastrowid or 0)
+        self._conn.execute(
+            "INSERT INTO messages_fts (content, message_id) VALUES (?, ?)", (content, message_id)
+        )
+        self._conn.commit()
+        return message_id
+
+    def messages(
+        self,
+        session_id: str | None = None,
+        *,
+        limit: int = 100,
+        since: datetime | float | None = None,
+    ) -> list[Message]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if session_id:
+            clauses.append("session_id = ?")
+            params.append(session_id)
+        if since is not None:
+            clauses.append("created_at >= ?")
+            params.append(_to_epoch(since))
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = self._conn.execute(
+            f"SELECT * FROM messages {where} ORDER BY id DESC LIMIT ?", (*params, limit)
+        ).fetchall()
+        return [_message(r) for r in rows]
+
+    def search_messages(self, query: str, *, limit: int = 10) -> list[Message]:
+        """FTS5 phrase search (fallback: LIKE). Returns best matches first."""
+        query = (query or "").strip()
+        if not query:
+            return []
+        match = '"' + query.replace('"', '""') + '"'
+        try:
+            rows = self._conn.execute(
+                "SELECT m.* FROM messages m JOIN messages_fts f ON f.message_id = m.id"
+                " WHERE f MATCH ? ORDER BY bm25(f) LIMIT ?",
+                (match, limit),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            rows = self._conn.execute(
+                "SELECT * FROM messages WHERE content LIKE ? ORDER BY id DESC LIMIT ?",
+                (f"%{query}%", limit),
+            ).fetchall()
+        return [_message(r) for r in rows]
 
     # --------------------------------------------------------------- scheduling
 

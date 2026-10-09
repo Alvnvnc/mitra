@@ -226,3 +226,45 @@ nyata**.
 2. Ringkasan baseline (M1–M5) + hasil wawancara anonim → ditambahkan ke dokumen ini sebagai
    bagian **"Hasil"**.
 3. Keputusan gate: lanjut / sempitkan / ubah — beserta catatan bukti.
+
+---
+
+# Hasil — W1 (ditulis 9 Oktober 2026)
+
+**Jendela:** 2–9 Oktober 2026. Data mentah: `validation/observation_log.csv` (privat) + journalctl.
+
+## Ringkasan per skenario
+
+| Skenario | Status | Temuan utama |
+|---|---|---|
+| S1 konteks | ✅ | Instruksi hilang lintas sesi; agen "berarkeologi" ke penyimpanan pribadi (vault) alih-alih bertanya; sesi baru tidak mengetahui komitmen. |
+| S2 jadwal | ✅ (5 hari) | 5 pesan terjadwal: 3 tepat (5/6/8 Okt), 1 terlambat **+7j25m** (7 Okt), 1 **hilang** (9 Okt). |
+| S3 klaim | ✅ (2 run) | Klaim akurat 2/2; biaya verifikasi nyata (~5–6 langkah per klaim). |
+| S4 pengiriman | ✅ | Dua insiden nyata; keduanya **senyap** — hanya terdeteksi setelah diberi tahu. |
+| S5 pemeliharaan | 🟡 sebagian | Menit pemeliharaan user tidak dilaporkan (Q5 dilewati) — keterbatasan pencatatan, dicatat apa adanya. |
+
+## Baseline metrik (sebagian)
+
+| Metrik | Baseline | Catatan |
+|---|---|---|
+| M1 intervensi/tugas | Kualitatif: koreksi konteks (S1) + verifikasi manual tiap klaim (S3) + cek status manual (S2) | Angka pasti tidak lengkap; hitungan "dorongan cek" user tidak dilaporkan |
+| M2 insiden instruksi kedaluwarsa | 1 (S1 hari 3: komitmen tidak dikenal; agen menyisir storage 13 perintah shell) | |
+| M3 klaim tanpa bukti | 0/2 klaim gagal verifikasi — tetapi tiap klaim butuh 5–6 langkah verifikasi | Beban verifikasi = temuan, bukan klaim palsu |
+| M4 waktu deteksi kegagalan | Keterlambatan 7 Okt: baru sadar saat diberi tahu (~2 hari); kehilangan 9 Okt: tidak disadari | Baseline ≈ "tidak pernah tanpa diberi tahu" |
+| M5 manfaat bersih | Belum dihitung (menit pemeliharaan user tidak dilaporkan) | Diukur ulang vs Mitra di W3–W4 |
+
+## Keputusan gate: **LANJUT (bersyarat F2)**
+
+- **Sisi-diri:** ≥2 dari 3 beban terkonfirmasi — konteks ✅ (S1), eksekusi ✅ (S2: 2 insiden nyata dalam 5 hari),
+  hasil ✅ (S3 biaya verifikasi + S4 senyap). Bahkan 3/3.
+- **F2 (wawancara ≥2/5):** BELUM dijalankan — kit siap; dikerjakan **paralel di W2** (tidak memblokir build).
+  Jika hasilnya <2/5 mengenali pola, rumusan disempitkan ke v1.1.
+- **F3 (pembanding sederhana):** baseline sederhana justru menunjukkan kegagalan senyap → memperkuat pembeda.
+- **F4 (manfaat bersih):** menunggu angka M5; mekanisme tidak akan ditambah sebelum terukur.
+
+## Keterbatasan (jujur)
+
+- Angka M1 tidak lengkap; kategori intervensi di log tidak sepenuhnya terisi.
+- S1 dijalankan pada hari yang sama (deviasi tercatat); timeout agen dibedakan dari kesimpulan beban.
+- Keterlambatan 7 Okt berasal dari kondisi host/timer (suspend/boot), bukan kegagalan API — tetap valid sebagai
+  perilaku baseline yang senyap.

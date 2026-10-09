@@ -38,11 +38,11 @@ which success metric does it improve? Features that cannot answer both are cut.
 - [x] Token Factory API key → `python scripts/smoke_test.py --all` responds for all 4 models (verified 2026-10-02: 4/4 OK, 0.7–2.1s)
 - [x] `git init` + public GitHub repo with MIT visible at top
 - [x] Dev env on laptop: `pip install -e ".[dev]"`, `pytest -q` green
-- [ ] Run the [validation scenarios S1–S5](VALIDATION_SCENARIOS.md); record baseline M1–M5 in `validation/observation_log.csv` — progress: S1 ✅ (2026-10-02), S3 ✅ (2 runs), S5 🔄, S2 baseline window done 5–9 Oct with two silent incidents (7 Oct +7h25m late; 9 Oct missed entirely) — now awaiting user-side observations + interviews (kit ready) before the gate
+- [x] Run the [validation scenarios S1–S5](VALIDATION_SCENARIOS.md); record baseline M1–M5 in `validation/observation_log.csv` — closed 2026-10-09: S1 ✅, S3 ✅, S2 window ✅ (3 on time, 1 late +7h25m, 1 missed — all silent); M4 key finding: failures never detected without being told; M1/M5 partial — **gate: LANJUT bersyarat F2** (interviews run parallel in W2)
 - [ ] Create the Nebius AI Cloud VM (CPU preset, Ubuntu 24.04, public IP) — can slip to W2
 - **Exit:** baseline recorded + decision gate passed; smoke test OK; repo public; VM reachable via SSH.
 
-### W2 — Oct 10–16 — Memory core
+### W2 — Oct 10–16 — Memory core (started early 2026-10-09)
 - [ ] Ledger schema + migrations; event ingestion (messages, tasks, tool calls)
 - [ ] Self-model store (Markdown + frontmatter read/write)
 - [ ] Consolidation v1 (fast model): window → facts → approval inbox → apply
