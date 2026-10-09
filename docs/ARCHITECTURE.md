@@ -250,6 +250,7 @@ Real personal data never appears in the public repo or demo.
 | Failure | Stage (process/storage/delivery) | Mitigation |
 |---|---|---|
 | Scheduled run fails | process | recorded in `task_runs`; push notification ≤1h (M4); explicit retry policy |
+| Host off at due time (missed run) | process | next tick catches up once per day (no duplicate) + late notice; baseline comparison: non-persistent timer skipped silently (observed 2026-10-09) |
 | Consolidation/storage fails | storage | transaction + WAL; failure event + push; no silent downgrade (community finding #49200) |
 | Result not delivered | delivery | delivery state + receipt; fallback notification lane; ≤1h target |
 | Approval timeout | process | pending item stays visible; reminder to a fallback lane; deny-by-default for risky actions |
