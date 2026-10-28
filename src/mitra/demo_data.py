@@ -230,6 +230,18 @@ SESSIONS = [
                 "Three memory proposals are waiting in the approval inbox, plus one queued notification approval. The paused Sunday review is not counted as a decision — it stays paused until you decide.",
                 _reply_meta(["priorities.md", "preferences.md", "approvals:pending"]),
             ),
+            ("user", "Which one is actually blocking the submission?"),
+            (
+                "assistant",
+                "The AgriSens dataset request. The 16:30 follow-up delivered, but no reply is logged after it, and the November validation run needs that export before it can start. The other two proposals change how briefs are written — they improve the work, they do not gate it.",
+                _reply_meta(
+                    [
+                        "projects.md",
+                        "message:agrisens-thread#12",
+                        "commitment:Dataset request follow-up",
+                    ]
+                ),
+            ),
         ],
     },
 ]
@@ -582,6 +594,23 @@ def seed(data_dir: str | Path, *, fresh: bool = False) -> Path:
         ("tool_approval", "approval:1", "approved", "high", {"lane": "dashboard"}),
         ("tool_exec", "note_write", "executed", "medium", {"ms": 12, "ok": True}),
         ("tool_call", "run_shell", "denied", "high", {"reason": "unknown tool 'run_shell'"}),
+        (
+            "tool_call",
+            "web_fetch",
+            "denied",
+            "high",
+            {
+                "url": "http://169.254.169.254/latest/meta-data/",
+                "reason": "private address blocked by egress policy",
+            },
+        ),
+        (
+            "tool_call",
+            "memory_write",
+            "denied",
+            "medium",
+            {"page": "priorities.md", "reason": "chat is read-only; a proposal is required"},
+        ),
         ("consolidation", "window:24h", "executed", "low", {"created": 3, "method": "model"}),
         ("memory_edit", "projects.md", "executed", "medium", {"chars": 412}),
         ("tool_call", "notify_send", "approval_required", "high", {"lane": "ntfy"}),
