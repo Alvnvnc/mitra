@@ -1,4 +1,4 @@
-# Devpost submission — copy, links, and the 3-minute video
+# Devpost submission — copy, links, and the walkthrough video
 
 Everything below is ready to paste. Replace `DEMO_URL` and `REPO_URL` once the
 demo is deployed.
@@ -6,7 +6,7 @@ demo is deployed.
 - **Demo:** <https://ip-172-26-13-244.tail40f715.ts.net:10000/> (synthetic instance, resettable)
 - **Repository:** https://github.com/Alvnvnc/mitra
 - **Track:** Personal AI
-- **Video:** 3:00, structure below
+- **Video:** 3:06 (title card + captioned walkthrough + end card), structure below
 
 ---
 
@@ -146,27 +146,31 @@ API key" on every surface. The live path is implemented and tested with a stub;
 
 ---
 
-# 3-minute video script
+# Walkthrough script (3:06)
 
 > **A captioned picture track already exists:** `docs/media/demo-walkthrough.mp4`
-> (3:00, 1440×900, silent with on-screen captions, recorded from the demo
-> instance). Upload it as-is, or lay the narration below over it — the beats line
-> up with the script timings. Re-record with
-> `python scripts/record_demo.py --base <url> --out docs/media/demo.webm`.
+> (3:06 including title and end cards, 1440×900, silent with burned-in captions,
+> recorded from the deployed demo). Upload it as-is, or lay the narration below
+> over it — the beats line up with the times in the table. Rebuild it with
+> `python scripts/record_demo.py --out /tmp/demo.webm`, then
+> `python scripts/build_video_assets.py` and
+> `python scripts/mux_demo_video.py --raw /tmp/demo.webm`.
 
 Screen recording, 1440×900 browser, demo instance running. Speak calmly; do not
 narrate the UI, narrate the *guarantee*.
 
 | Time | On screen | Say |
 |---|---|---|
-| 0:00–0:15 | Today view, hero + "4 things need you" | "This is Mitra. It runs recurring work for me and it proves what happened. Right now four things need a human decision — and it says so without me asking." |
-| 0:15–0:35 | Scroll to the red delivery banner, click **View notice** | "This commitment ran, passed its evidence check, produced a verified artifact — and then delivery failed. Mitra records `delivery_failed`, writes a notice, and keeps the result. Delivery is a separate stage from execution, by design." |
-| 0:35–1:05 | Commitments → open *Morning research brief* → Runs table | "Every run carries evidence. Two checks: artifact exists, artifact has the required sections. Green means both passed. This red row is a real failure — the skill demanded three bullets, the artifact had two, and the gate refused to call it done." |
-| 1:05–1:30 | Instruction history → the scheduled v3 card | "Instructions are versions, and only the version effective at run time is used. v3 becomes effective tomorrow at 14:17. Tomorrow's run picks it up. Today's run cannot. That is enforced in the scheduler, not in a prompt." |
-| 1:30–2:00 | Memory view → approve a proposal | "Chat cannot write memory. Nightly consolidation proposes a change, with the diff and the source message ids. I approve, and it appends one bullet. If I reject, the page stays byte-identical. The model never decides what it remembers." |
-| 2:00–2:25 | Chat → "What needs a decision today?" | "Chat reads the real ledger, retrieves the memory pages it used, calls tools through the policy layer, and shows the trace and the cost of the turn. Note the label: this instance runs the local fallback model because our Token Factory key was rejected — the live path is Nemotron 3 on Nebius." |
-| 2:25–2:45 | Audit view → filter **denied** | "Every decision is here, including the ones that were refused. `run_shell` was denied because it is not on the allowlist. A security claim you can't audit isn't a security claim." |
-| 2:45–3:00 | Stats view | "Cost, reliability, interventions, and calls by model — measured per call, not estimated. This is what 'always-on and trustworthy' has to look like: a ledger you can read, and a system that tells on itself." |
+| 0:00–0:02 | Title card | "Mitra: delegated work, verified." |
+| 0:02–0:13 | Today view, hero + "4 things need you" | "This is Mitra. It runs recurring work for me and it proves what happened. Right now four things need a human decision — and it says so without me asking." |
+| 0:13–0:31 | Scroll to needs-you, click **View notice** | "This commitment ran, passed its evidence check, produced a verified artifact — and then delivery failed. Mitra records `delivery_failed`, writes a notice, and keeps the result. Delivery is a separate stage from execution, by design." |
+| 0:31–0:46 | Commitments → open *Morning research brief* | "Every commitment is one unit of delegated work: a schedule, a skill, and exactly one instruction version in force." |
+| 0:46–1:28 | Runs table, evidence counts, instruction history | "Every run carries evidence. Two checks: the artifact exists, and it has the required sections. Green means both passed. The red row is real — the skill demanded three bullets, the artifact had two, and the gate refused to call it done. And instructions are versions: v3 becomes effective tomorrow. Tomorrow's run picks it up; today's cannot. That is enforced in the scheduler, not in a prompt." |
+| 1:28–1:57 | Memory view → reject a proposal | "Chat cannot write memory. Consolidation proposes a change, with the diff and the source message ids. If I reject, the page stays byte-identical. Approving appends one bullet. The model never decides what it remembers." |
+| 1:57–2:32 | Chat → new conversation → "Did yesterday's brief actually deliver?" → expand the trace | "Chat reads the real ledger, retrieves the memory pages it used, calls tools through the policy layer, and shows the sources, the trace and the cost of the turn. Note the label: this instance runs the local fallback model because our Token Factory key was rejected — the live path is Nemotron 3 on Nebius." |
+| 2:32–2:46 | Audit → filter **denied** | "Every decision is here, including the refused ones. `web_fetch` was denied for a private address; `run_shell` for not being on the allowlist; a memory write because chat is read-only. A security claim you can't audit isn't a security claim." |
+| 2:46–3:02 | Stats view | "Cost, reliability, interventions, and calls by model — measured per call, not estimated. This is what 'always-on and trustworthy' has to look like: a ledger you can read, and a system that tells on itself." |
+| 3:02–3:06 | End card | — |
 
 ## Closing line
 
@@ -175,9 +179,9 @@ own. It is a partner that keeps its promises in writing."
 
 ## Thumbnail
 
-`docs/media/today.png`, cropped to the hero: "Good evening, Maya. / 4 things need
-you." on warm paper, with the delivery-failure banner visible. No text overlay
-needed; the type is the design.
+`docs/media/today.png`, cropped to the hero: "4 things need you." on warm paper,
+with the delivery-failure banner visible. No text overlay needed; the type is the
+design. The video title card (`.design/video/title.png`) works as a fallback.
 
 ## Swapping in a live Nebius key (before the deadline)
 

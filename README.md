@@ -52,7 +52,7 @@ src/mitra/
 docker/              Dockerfile entrypoint + Caddyfile for a TLS front door.
 scripts/             serve.py, seed_demo.py, capture_screens.py, record_demo.py,
                      smoke_test.py, demo_vertical_slice.py, run_scheduler.py, ntfy_ping.py.
-tests/               44 tests: ledger invariants, policy, agent, consolidation, HTTP surface.
+tests/               46 tests: ledger invariants, policy, agent, consolidation, HTTP surface.
 docs/                architecture, problem statement, validation plan, media, feedback.
 ```
 
@@ -80,7 +80,7 @@ cp .env.example .env
 MITRA_DATA_DIR=data/demo MITRA_DEMO_MODE=1 \
   .venv/bin/python scripts/serve.py --port 8080         # dashboard
 .venv/bin/python scripts/run_scheduler.py --once       # one scheduler tick against real skills
-.venv/bin/python -m pytest -q                          # 44 tests
+.venv/bin/python -m pytest -q                          # 46 tests
 ```
 
 ### Public demo hardening
@@ -112,7 +112,11 @@ Set `NEBIUS_API_KEY` and restart: the router probes the key at startup, flips `p
 
 ## The dashboard
 
-Seven views, all reading the same ledger.
+Seven views, all reading the same ledger, in one shell: a quiet rail for
+navigation, a sticky command bar (`⌘K` or `/` opens the palette), and one primary
+surface per view with the supporting context in a right rail. Dense tables carry
+the detail, and the demo banner stays pinned so synthetic data is never mistaken
+for real work.
 
 | View | What it is for |
 |---|---|
@@ -142,7 +146,7 @@ Mobile: layout collapses to a single column with a slide-over navigation rail (`
 - **Delivery is separate.** `mark_delivery_failed()` never mutates the run's evidence; the verified artifact survives a delivery failure.
 - **Policy before egress.** Every tool declares risk and egress hosts; `PolicyEngine` checks scheme, host, and private-address resolution through a single HTTP wrapper. Denials are audited, not dropped.
 - **Memory writes need a human.** Chat is read-only against the self-model; consolidation only *proposes*.
-- **Tests.** 44 tests covering ledger invariants, policy/approvals, the agent loop, consolidation, and the HTTP surface. `ruff check` and `ruff format --check` are clean.
+- **Tests.** 46 tests covering ledger invariants, policy/approvals, the agent loop, consolidation, and the HTTP surface. `ruff check` and `ruff format --check` are clean.
 
 ## Limitations (deliberate)
 
