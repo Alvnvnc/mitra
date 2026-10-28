@@ -1,12 +1,10 @@
 # Mitra — Architecture
 
-Status: draft v0.2 (2026-10-04) — aligned with `docs/PROBLEM_STATEMENT.md` v1.0
-(internal gap analysis R1–R6, 2026-10-02) + S1 findings. Pending the W1 validation
-gate before implementation. The vertical slice (§4 commitments tables + runner +
-delivery) was implemented as a draft on 2026-10-03 at the user's request to
-de-risk W2; this does not waive the gate — validation data may still change the
-rules. This document is the contract for the build; update it when a decision
-changes.
+Status: **implemented** (2026-10-28). This document started as a contract
+before the build and is kept as the design record; where the implementation
+diverged, the code is authoritative and the divergence is noted. For the
+user-facing tour, start with the [README](../README.md); for the runnable
+behaviour, see `tests/`.
 
 ## 1. What this is
 
