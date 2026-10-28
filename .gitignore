@@ -29,5 +29,8 @@ build/
 .idea/
 .vscode/
 
+# Recorded walkthrough (upload to Devpost, not committed)
+docs/media/*.mp4
+
 # Design references (third-party screenshots, not redistributed)
 .design/

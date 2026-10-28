@@ -148,6 +148,12 @@ API key" on every surface. The live path is implemented and tested with a stub;
 
 # 3-minute video script
 
+> **A captioned picture track already exists:** `docs/media/demo-walkthrough.mp4`
+> (3:00, 1440×900, silent with on-screen captions, recorded from the demo
+> instance). Upload it as-is, or lay the narration below over it — the beats line
+> up with the script timings. Re-record with
+> `python scripts/record_demo.py --base <url> --out docs/media/demo.webm`.
+
 Screen recording, 1440×900 browser, demo instance running. Speak calmly; do not
 narrate the UI, narrate the *guarantee*.
 

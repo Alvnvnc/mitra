@@ -50,8 +50,8 @@ src/mitra/
   web/app.py         FastAPI app: dashboard, JSON API, SSE chat stream, security headers.
   web/static/        The dashboard — vanilla ES modules, no build step, self-hosted fonts.
 docker/              Dockerfile entrypoint + Caddyfile for a TLS front door.
-scripts/             serve.py, seed_demo.py, capture_screens.py, smoke_test.py,
-                     demo_vertical_slice.py, run_scheduler.py, ntfy_ping.py.
+scripts/             serve.py, seed_demo.py, capture_screens.py, record_demo.py,
+                     smoke_test.py, demo_vertical_slice.py, run_scheduler.py, ntfy_ping.py.
 tests/               44 tests: ledger invariants, policy, agent, consolidation, HTTP surface.
 docs/                architecture, problem statement, validation plan, media, feedback.
 ```
