@@ -97,9 +97,7 @@ def main() -> int:
         print(f"instruksi v1 dibuat (aktif): id={v1}")
         versions = ledger.list_instruction_versions(commitment_id)
     if len(versions) == 1:
-        tomorrow_8 = (now + timedelta(days=1)).replace(
-            hour=8, minute=0, second=0, microsecond=0
-        )
+        tomorrow_8 = (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
         v2 = ledger.add_instruction_version(
             commitment_id,
             content="Mulai besok: kirim 08.00 WIB (bukan 07:30). Sisanya tetap.",

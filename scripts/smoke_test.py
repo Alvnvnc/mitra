@@ -73,9 +73,11 @@ def main() -> int:
         text = (message.content or "").strip().replace("\n", " ")
         if not text:
             has_reasoning = bool(getattr(message, "reasoning_content", None))
-            text = "(konten kosong - model mengirim reasoning saja" + (
-                "; reasoning_content tersedia" if has_reasoning else ""
-            ) + ")"
+            text = (
+                "(konten kosong - model mengirim reasoning saja"
+                + ("; reasoning_content tersedia" if has_reasoning else "")
+                + ")"
+            )
         usage = resp.usage
         tok_in = getattr(usage, "prompt_tokens", 0) or 0
         tok_out = getattr(usage, "completion_tokens", 0) or 0
