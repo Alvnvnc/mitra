@@ -173,6 +173,25 @@ own. It is a partner that keeps its promises in writing."
 you." on warm paper, with the delivery-failure banner visible. No text overlay
 needed; the type is the design.
 
+## Swapping in a live Nebius key (before the deadline)
+
+The demo instance currently reports `provider: demo`. To run it on Nemotron:
+
+```bash
+# on the host that serves the demo
+cd mitra
+printf 'NEBIUS_API_KEY=%s\n' "$KEY" >> .env
+sudo docker compose -p mitra up -d            # recreate with the new env
+curl -s localhost:8080/api/health             # expect "provider":"nebius"
+.venv/bin/python scripts/smoke_test.py --all   # optional: per-tier latency check
+```
+
+The router probes the key at startup. When it authenticates, the sidebar model
+card switches from "Local demo model" to "Nemotron · Nebius", replies are
+labelled `nemotron` with real per-call cost, and the Stats view starts counting
+actual spend. Nothing else changes — same ledger, same gate, same policy. The
+synthetic-data banner stays, because the seeded commitments are still synthetic.
+
 ## Submission checklist
 
 - [x] Demo live and reachable without a token (Tailscale Funnel, HTTPS)
