@@ -35,6 +35,11 @@ class Shot:
     async def goto(self, url: str) -> None:
         await self.page.goto(url, wait_until="networkidle")
         await self.page.wait_for_timeout(600)
+        await self.page.mouse.move(900, 520)
+
+    async def scroll(self, amount: int) -> None:
+        await self.page.mouse.move(900, 520)
+        await self.page.mouse.wheel(0, amount)
 
 
 async def main() -> int:
@@ -57,60 +62,11 @@ async def main() -> int:
         page = await context.new_page()
         shot = Shot(page)
 
-        # 0:00 — Today
-        await shot.goto(args.base + "/#/today")
-        await shot.wait_until(12)
-        await page.mouse.wheel(0, 260)  # banner + KPIs
-        await shot.wait_until(17)
-        await page.locator('[data-act="notice"]').first.click()
-        await shot.wait_until(26)
-        await page.keyboard.press("Escape")
-        await shot.wait_until(30)
-
-        # 0:30 — Commitments → detail → runs
-        await shot.goto(args.base + "/#/commitments")
-        await shot.wait_until(36)
-        await page.locator("tr.clickable").first.click()
-        await shot.wait_until(46)
-        await page.mouse.wheel(0, 430)  # runs table
-        await shot.wait_until(62)
-
-        # 1:02 — instruction versions
-        await page.mouse.wheel(0, 700)
-        await shot.wait_until(78)
-        await page.mouse.wheel(0, 380)
-        await shot.wait_until(88)
-
-        # 1:28 — memory approval inbox
-        await shot.goto(args.base + "/#/memory")
-        await shot.wait_until(96)
-        await page.mouse.wheel(0, 180)
-        await shot.wait_until(108)
-        await page.locator('[data-act="reject-proposal"]').first.click()
-        await shot.wait_until(116)
-
-        # 1:56 — chat turn
-        await shot.goto(args.base + "/#/chat")
-        await shot.wait_until(122)
-        await page.fill("#chatInput", "What needs a decision today?")
-        await shot.wait_until(126)
-        await page.click("#sendBtn")
-        await shot.wait_until(142)
-
-        # 2:22 — audit, denied filter
-        await shot.goto(args.base + "/#/audit")
-        await shot.wait_until(148)
-        await page.locator('[data-act="audit-filter"][data-filter="denied"]').click()
-        await shot.wait_until(164)
-
-        # 2:44 — stats
-        await shot.goto(args.base + "/#/stats")
-        await shot.wait_until(176)
-        await page.mouse.wheel(0, 300)
-        await shot.wait_until(180)
-
-        await context.close()  # finalises the video file
-        await browser.close()
+        try:
+            await record(page, shot, args.base)
+        finally:
+            await context.close()  # always finalise the video file
+            await browser.close()
 
     video = sorted((out.parent / "_video").glob("*.webm"))[-1]
     video.replace(out)
@@ -120,6 +76,67 @@ async def main() -> int:
     (out.parent / "_video").rmdir()
     print(f"recorded {out} ({out.stat().st_size / 1e6:.1f} MB)")
     return 0
+
+
+async def record(page, shot, base: str) -> None:
+    # 0:00 — Today: the decision surface first
+    await shot.goto(base + "/#/today")
+    await shot.wait_until(13)
+    await shot.scroll(250)  # needs-you rows + commitments
+    await shot.wait_until(20)
+    await page.locator('[data-act="notice"]').first.click()
+    await shot.wait_until(28)
+    await page.keyboard.press("Escape")
+    await shot.wait_until(31)
+
+    # 0:31 — Commitments → detail → runs
+    await shot.goto(base + "/#/commitments")
+    await shot.wait_until(37)
+    await page.locator("tr.clickable").first.click()
+    await shot.wait_until(46)
+    await shot.scroll(360)  # runs table
+    await shot.wait_until(62)
+
+    # 1:02 — instruction versions + evidence
+    await shot.scroll(620)
+    await shot.wait_until(78)
+    await shot.scroll(320)
+    await shot.wait_until(88)
+
+    # 1:28 — memory approval inbox
+    await shot.goto(base + "/#/memory")
+    await shot.wait_until(95)
+    await shot.scroll(170)
+    await shot.wait_until(107)
+    await page.locator('[data-act="reject-proposal"]').first.click()
+    await shot.wait_until(114)
+    await shot.scroll(-400)
+    await shot.wait_until(117)
+
+    # 1:57 — chat: a fresh turn with retrieval + trace
+    await shot.goto(base + "/#/chat")
+    await shot.wait_until(121)
+    await page.locator('[data-act="new-chat"]').click()
+    await shot.wait_until(124)
+    await page.fill("#chatInput", "Did yesterday's brief actually deliver?")
+    await shot.wait_until(128)
+    await page.click("#sendBtn")
+    await shot.wait_until(145)
+    if await page.locator(".trace summary").count():
+        await page.locator(".trace summary").last.click()
+    await shot.wait_until(150)
+
+    # 2:30 — audit, denied filter
+    await shot.goto(base + "/#/audit")
+    await shot.wait_until(154)
+    await page.locator('[data-act="audit-filter"][data-filter="denied"]').click()
+    await shot.wait_until(166)
+
+    # 2:46 — stats
+    await shot.goto(base + "/#/stats")
+    await shot.wait_until(173)
+    await shot.scroll(300)
+    await shot.wait_until(182)
 
 
 if __name__ == "__main__":

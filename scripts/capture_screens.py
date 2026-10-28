@@ -47,7 +47,7 @@ async def main() -> int:
         for name in selected:
             await page.goto(args.base + "/" + VIEWS[name], wait_until="networkidle")
             await page.wait_for_timeout(1200)
-            await page.screenshot(path=str(out / f"{name}.png"), full_page=(name != "chat"))
+            await page.screenshot(path=str(out / f"{name}.png"))
             print("captured", name)
 
         # commitment detail (first row)
@@ -57,16 +57,16 @@ async def main() -> int:
         if await row.count():
             await row.click()
             await page.wait_for_timeout(1200)
-            await page.screenshot(path=str(out / "commitment-detail.png"), full_page=True)
+            await page.screenshot(path=str(out / "commitment-detail.png"))
             print("captured commitment-detail")
 
         # chat interaction
         await page.goto(args.base + "/#/chat", wait_until="networkidle")
         await page.wait_for_timeout(800)
-        await page.fill("#chatInput", "What needs a decision today?")
+        await page.fill("#chatInput", "Did yesterday's brief actually deliver?")
         await page.click("#sendBtn")
         await page.wait_for_timeout(6000)
-        await page.screenshot(path=str(out / "chat-reply.png"), full_page=False)
+        await page.screenshot(path=str(out / "chat-reply.png"))
         print("captured chat-reply")
 
         print("console errors:", errors or "none")
@@ -81,7 +81,7 @@ async def main() -> int:
         for name in ("today", "chat", "memory"):
             await page.goto(args.base + "/" + VIEWS[name], wait_until="networkidle")
             await page.wait_for_timeout(900)
-            await page.screenshot(path=str(out / f"mobile-{name}.png"), full_page=True)
+            await page.screenshot(path=str(out / f"mobile-{name}.png"))
             print("captured mobile", name)
         await browser.close()
     return 0
