@@ -69,6 +69,26 @@ class Runtime:
         self._scheduler: threading.Thread | None = None
         self._started_pages = created
 
+    # ------------------------------------------------------------------ reset
+
+    def reset_demo(self) -> None:
+        """Reseed the demo instance in place, leaving every live reference fresh.
+
+        The ledger is closed and rebuilt, so every component that captured the
+        old connection has to be rebuilt too — otherwise the next chat turn or
+        tool call hits a closed database.
+        """
+        from mitra.demo_data import seed
+
+        self.ledger.close()
+        seed(self.data_dir, fresh=True)
+        self.ledger = Ledger(self.data_dir / "ledger.db")
+        self.selfmodel = SelfModel(self.data_dir / "self_model")
+        self.selfmodel.ensure_defaults()
+        self.router.ledger = self.ledger
+        self.toolbox = ToolBox(self.ledger, self.selfmodel, data_dir=self.data_dir)
+        self.agent = ChatAgent(self.ledger, self.router, self.selfmodel, self.toolbox)
+
     # ------------------------------------------------------------- scheduler
 
     def start_scheduler(self, interval_s: int = 60) -> None:
@@ -810,15 +830,7 @@ def create_app(
     def demo_reset(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
         if not runtime.settings.mitra_demo_mode:
             raise HTTPException(403, "reset is only available with MITRA_DEMO_MODE=1")
-        from mitra.demo_data import seed
-
-        runtime.ledger.close()
-        seed(runtime.data_dir, fresh=True)
-        runtime.ledger = Ledger(runtime.data_dir / "ledger.db")
-        runtime.selfmodel = SelfModel(runtime.data_dir / "self_model")
-        runtime.toolbox.ledger = runtime.ledger
-        runtime.agent.ledger = runtime.ledger
-        runtime.agent.selfmodel = runtime.selfmodel
+        runtime.reset_demo()
         return runtime.bootstrap()
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

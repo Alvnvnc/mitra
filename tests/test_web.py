@@ -139,3 +139,30 @@ def test_demo_reset_reseeds_in_place(tmp_path, monkeypatch):
     body = response.json()
     assert len(body["commitments"]) == 4
     assert len(body["proposals"]) >= 1
+
+
+def test_chat_still_works_after_demo_reset(tmp_path):
+    """Every component must rebind to the new ledger, not a closed connection."""
+    from mitra.demo_data import seed
+
+    data = tmp_path / "data"
+    seed(data)
+
+    from mitra.web.app import create_app
+
+    app = create_app(data)
+    app.state.runtime.settings.mitra_demo_mode = True
+    client = TestClient(app)
+    assert client.post("/api/demo/reset", json={}).status_code == 200
+
+    session = client.post("/api/sessions", json={"title": "after reset"}).json()["session_id"]
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"session_id": session, "message": "Did yesterday's brief actually deliver?"},
+    ) as response:
+        assert response.status_code == 200
+        text = "".join(response.iter_text())
+
+    assert '"type": "final"' in text
+    assert "closed database" not in text.lower()
