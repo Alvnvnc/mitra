@@ -141,6 +141,21 @@ COMMITMENTS = [
     },
 ]
 
+
+def _reply_meta(sources: list[str], *, provider: str = "demo") -> dict[str, object]:
+    """Metadata a seeded assistant turn would have written in a live turn."""
+    return {
+        "provider": provider,
+        "cost_usd": 0.0,
+        "sources": sources,
+        "trace": [
+            {"stage": "retrieve", "label": f"{len(sources)} memory sources, ~135 tokens"},
+            {"stage": "model", "label": "mitra/local-demo · 752+186 tok"},
+            {"stage": "done", "label": "local demo model · $0.0000"},
+        ],
+    }
+
+
 SESSIONS = [
     {
         "title": "Dataset request to AgriSens",
@@ -153,6 +168,7 @@ SESSIONS = [
             (
                 "assistant",
                 "Last recorded action was the 16:30 follow-up run on Monday: it produced a draft and marked the run done with evidence. No reply is logged after that, so the request is still open — I won't call it resolved.",
+                _reply_meta(["projects.md", "message:agrisens-thread#12"]),
             ),
             (
                 "user",
@@ -161,6 +177,7 @@ SESSIONS = [
             (
                 "assistant",
                 "Noted as a candidate memory. I won't write it to the self-model myself; it will appear in the approval inbox after consolidation so you can accept or reject it.",
+                _reply_meta(["people.md", "preferences.md", "message:agrisens-thread#16"]),
             ),
         ],
     },
@@ -175,11 +192,13 @@ SESSIONS = [
             (
                 "assistant",
                 "I found two usable sources through the web search tool. Both report red-edge indices, but one is a single-plantation study with no cross-site validation — the limitation matters more than the accuracy number.",
+                _reply_meta(["projects.md", "web_search:sentinel-2-red-edge"]),
             ),
             ("user", "Save the comparison as a note for the methods section."),
             (
                 "assistant",
                 "That is a write outside the memory inbox, so it needs approval. I've queued the note in the approval inbox; once you approve it, the file is written under data/notes.",
+                _reply_meta(["projects.md"]),
             ),
         ],
     },
@@ -191,11 +210,13 @@ SESSIONS = [
             (
                 "assistant",
                 "The run happened and produced a result, but delivery failed on the ntfy lane — the ledger shows delivery_failed, not done, and a fallback notice was written. The verified result is still on disk; I can re-deliver it now.",
+                _reply_meta(["commitment:Weekly nutrient literature scan", "outbox:NOTICE"]),
             ),
             ("user", "So the task itself was fine."),
             (
                 "assistant",
                 "Correct: the evidence check passed. Delivery is a separate stage in this system by design, which is why you're seeing a delivery failure instead of a silent gap.",
+                _reply_meta(["commitment:Weekly nutrient literature scan"]),
             ),
         ],
     },
@@ -207,6 +228,7 @@ SESSIONS = [
             (
                 "assistant",
                 "Three memory proposals are waiting in the approval inbox, plus one queued notification approval. The paused Sunday review is not counted as a decision — it stays paused until you decide.",
+                _reply_meta(["priorities.md", "preferences.md", "approvals:pending"]),
             ),
         ],
     },
@@ -476,15 +498,22 @@ def seed(data_dir: str | Path, *, fresh: bool = False) -> Path:
         session_id = f"ses_demo_{uuid.uuid4().hex[:8]}"
         ledger.ensure_session(session_id, str(session["title"]))
         base = now - int(session["days_ago"]) * 86400 - 3 * 3600
-        for i, (role, content) in enumerate(session["messages"]):
+        for i, message in enumerate(session["messages"]):
+            role, content = message[0], message[1]
+            extra = message[2] if len(message) > 2 else {}
             mid = ledger.log_message(
                 session_id,
                 role,
                 content,
                 at=base + i * 420,
-                meta={"seeded": True},
+                meta={"seeded": True, **extra},
             )
             message_refs.append(mid)
+        ledger._conn.execute(
+            "UPDATE sessions SET updated_at = ? WHERE id = ?",
+            (base + (len(session["messages"]) - 1) * 420 + 60, session_id),
+        )
+    ledger._conn.commit()
 
     # Pending proposals + one approved example.
     for proposal in PROPOSALS:

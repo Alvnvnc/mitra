@@ -388,7 +388,7 @@ function renderToday() {
 
   const alert = (b.notices || []).length
     ? '<div class="alert-strip"><svg class="ico"><use href="#i-alert"/></svg><div><strong>Delivery failure is visible without asking.</strong> ' +
-      esc((b.notices[0].commitment || "A commitment").replace(/`[^`]*`/g, "").replace(/`/g, "")) + " · " +
+      esc((b.notices[0].commitment || "A commitment").replace(/`/g, "").replace(/\s*\(\s*\)/g, "").trim()) + " · " +
       esc(b.notices[0].stage || "delivery") + " stage · " + esc(b.notices[0].error || "see notice") +
       '</div><button class="btn btn-sm" data-act="notice" data-id="' + esc(b.notices[0].name) + '">View notice</button></div>'
     : "";
@@ -546,6 +546,11 @@ async function renderChat() {
       $("#chatInner").innerHTML = chatBody();
       bindComposer();
       scrollChat();
+      const lastReply = [...state.chat.messages].reverse().find((m) => m.role === "assistant" && m.meta);
+      if (lastReply) {
+        const meta = lastReply.meta || {};
+        updateContextPanel(meta.sources || [], meta.trace || []);
+      }
     } catch (err) {
       toast(err.message, "error");
     }

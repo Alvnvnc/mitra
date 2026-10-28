@@ -5,6 +5,8 @@
 Built for the [NVIDIA × Nebius Global AI Hackathon](https://nebiusglobalaihackathon.devpost.com/) — **Personal AI Track**.
 Inference runs on **NVIDIA Nemotron** models served by **Nebius Token Factory**; everything else — memory, scheduler, policy, evidence gate, dashboard — is this repository, MIT licensed, running on one VM you control.
 
+**Live demo:** <https://ip-172-26-13-244.tail40f715.ts.net:10000/> — a seeded synthetic instance you can click through (and reset).
+
 ![Today view](docs/media/today.png)
 
 ---

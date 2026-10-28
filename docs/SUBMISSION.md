@@ -3,7 +3,7 @@
 Everything below is ready to paste. Replace `DEMO_URL` and `REPO_URL` once the
 demo is deployed.
 
-- **Demo:** `DEMO_URL`
+- **Demo:** <https://ip-172-26-13-244.tail40f715.ts.net:10000/> (synthetic instance, resettable)
 - **Repository:** https://github.com/Alvnvnc/mitra
 - **Track:** Personal AI
 - **Video:** 3:00, structure below
@@ -175,7 +175,7 @@ needed; the type is the design.
 
 ## Submission checklist
 
-- [ ] `DEMO_URL` live and reachable without a token (or with `?token=…` documented)
+- [x] Demo live and reachable without a token (Tailscale Funnel, HTTPS)
 - [ ] Video uploaded (YouTube/Vimeo, public or unlisted)
 - [ ] Repository public, README first screen has a screenshot and the one-command run
 - [ ] `docs/FEEDBACK.md` linked in the submission (feedback bonus)
