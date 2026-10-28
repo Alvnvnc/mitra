@@ -107,6 +107,83 @@ CREATE INDEX IF NOT EXISTS idx_runs_commitment ON task_runs(commitment_id, run_a
 CREATE INDEX IF NOT EXISTS idx_evidence_run ON evidence(run_id);
 """
 
+# v2 additions (W3): sessions, model usage, audit, proposal inbox, approvals,
+# notes. Every table is additive; migrations run through PRAGMA user_version.
+OPERATIONS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS sessions (
+  id          TEXT PRIMARY KEY,
+  title       TEXT NOT NULL,
+  created_at  REAL NOT NULL,
+  updated_at  REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS model_calls (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  at                 REAL NOT NULL,
+  provider           TEXT NOT NULL DEFAULT 'nebius',
+  model              TEXT NOT NULL,
+  purpose            TEXT NOT NULL,
+  latency_s          REAL NOT NULL DEFAULT 0,
+  prompt_tokens      INTEGER NOT NULL DEFAULT 0,
+  completion_tokens  INTEGER NOT NULL DEFAULT 0,
+  cost_usd           REAL NOT NULL DEFAULT 0,
+  session_id         TEXT,
+  finish_reason      TEXT,
+  detail             TEXT
+);
+
+CREATE TABLE IF NOT EXISTS audit (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  at        REAL NOT NULL,
+  actor     TEXT NOT NULL DEFAULT 'mitra',
+  action    TEXT NOT NULL,
+  target    TEXT,
+  decision  TEXT NOT NULL,           -- allowed | denied | approval_required | executed
+  risk      TEXT NOT NULL DEFAULT 'low',
+  detail    TEXT
+);
+
+CREATE TABLE IF NOT EXISTS proposals (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  at           REAL NOT NULL,
+  kind         TEXT NOT NULL DEFAULT 'fact',   -- fact | preference | project | person | pattern
+  page         TEXT NOT NULL,
+  title        TEXT NOT NULL,
+  body         TEXT NOT NULL,
+  before       TEXT NOT NULL DEFAULT '',
+  after        TEXT NOT NULL DEFAULT '',
+  rationale    TEXT NOT NULL DEFAULT '',
+  source_refs  TEXT NOT NULL DEFAULT '[]',
+  status       TEXT NOT NULL DEFAULT 'pending', -- pending | approved | rejected
+  decided_at   REAL
+);
+
+CREATE TABLE IF NOT EXISTS approvals (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  at          REAL NOT NULL,
+  tool        TEXT NOT NULL,
+  args        TEXT NOT NULL DEFAULT '{}',
+  session_id  TEXT,
+  status      TEXT NOT NULL DEFAULT 'pending',  -- pending | approved | denied
+  decided_at  REAL,
+  result      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS notes (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  at         REAL NOT NULL,
+  title      TEXT NOT NULL,
+  body       TEXT NOT NULL,
+  path       TEXT,
+  tags       TEXT NOT NULL DEFAULT '[]'
+);
+
+CREATE INDEX IF NOT EXISTS idx_calls_at ON model_calls(at);
+CREATE INDEX IF NOT EXISTS idx_audit_at ON audit(at);
+CREATE INDEX IF NOT EXISTS idx_proposals_status ON proposals(status);
+CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status);
+"""
+
 # v1 additions (W2): conversation messages + full-text search over them.
 MESSAGES_SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -128,9 +205,19 @@ def _utcnow() -> float:
     return time.time()
 
 
-def _to_epoch(dt: datetime | None) -> float:
+def _to_epoch(dt: datetime | str | float | None) -> float:
     if dt is None:
         return _utcnow()
+    if isinstance(dt, (int, float)):
+        return float(dt)
+    if isinstance(dt, str):
+        text = dt.strip().replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError as exc:
+            raise ValueError(f"invalid ISO-8601 timestamp {dt!r}") from exc
+        aware = parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+        return aware.timestamp()
     aware = dt if dt.tzinfo else dt.replace(tzinfo=UTC)
     return aware.timestamp()
 
@@ -282,9 +369,13 @@ class Ledger:
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(self.path)
+        # One process, one connection. FastAPI runs sync endpoints in a worker
+        # thread, so the connection must be shareable; SQLite is built in
+        # serialized mode here and PRAGMA busy_timeout covers brief contention.
+        self._conn = sqlite3.connect(self.path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.executescript(SCHEMA)
         self._migrate()
@@ -299,6 +390,10 @@ class Ledger:
         if version < 1:
             self._conn.executescript(MESSAGES_SCHEMA)
             self._conn.execute("PRAGMA user_version = 1")
+            version = 1
+        if version < 2:
+            self._conn.executescript(OPERATIONS_SCHEMA)
+            self._conn.execute("PRAGMA user_version = 2")
 
     # ------------------------------------------------------------------ events
 
@@ -326,17 +421,23 @@ class Ledger:
         rows = self._conn.execute(
             "SELECT * FROM events ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
-        return [
-            {
-                "id": r["id"],
-                "at": iso(r["at"]),
-                "kind": r["kind"],
-                "commitment_id": r["commitment_id"],
-                "run_id": r["run_id"],
-                "detail": r["detail"],
-            }
-            for r in rows
-        ]
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            try:
+                detail = json.loads(r["detail"]) if r["detail"] else None
+            except (TypeError, ValueError):
+                detail = r["detail"]
+            out.append(
+                {
+                    "id": r["id"],
+                    "at": iso(r["at"]),
+                    "kind": r["kind"],
+                    "commitment_id": r["commitment_id"],
+                    "run_id": r["run_id"],
+                    "detail": detail,
+                }
+            )
+        return out
 
     # ------------------------------------------------------------- commitments
 
@@ -399,8 +500,7 @@ class Ledger:
             else _to_epoch(effective_from)
         )
         previous = self._conn.execute(
-            "SELECT id FROM instruction_versions WHERE commitment_id = ?"
-            " ORDER BY id DESC LIMIT 1",
+            "SELECT id FROM instruction_versions WHERE commitment_id = ? ORDER BY id DESC LIMIT 1",
             (commitment_id,),
         ).fetchone()
         cursor = self._conn.execute(
@@ -449,8 +549,7 @@ class Ledger:
         ).fetchone()
         if row is None:
             raise NoActiveInstructionError(
-                f"commitment {commitment_id!r} has no approved instruction effective"
-                f" at {iso(ts)}"
+                f"commitment {commitment_id!r} has no approved instruction effective at {iso(ts)}"
             )
         return _instruction(row)
 
@@ -571,8 +670,10 @@ class Ledger:
             (result, detail, evidence_id),
         )
         self._conn.commit()
-        self.log_event("evidence_checked", detail={"evidence_id": evidence_id, "result": result,
-                                                   "detail": detail})
+        self.log_event(
+            "evidence_checked",
+            detail={"evidence_id": evidence_id, "result": result, "detail": detail},
+        )
 
     def evidence_for_run(self, run_id: str) -> list[EvidenceItem]:
         rows = self._conn.execute(
@@ -680,3 +781,432 @@ class Ledger:
                 continue
             due.append(commitment)
         return due
+
+    # ------------------------------------------------------------------ runs (extra)
+
+    def latest_run(self, commitment_id: str) -> TaskRun | None:
+        row = self._conn.execute(
+            "SELECT * FROM task_runs WHERE commitment_id = ? ORDER BY run_at DESC LIMIT 1",
+            (commitment_id,),
+        ).fetchone()
+        return _run(row) if row else None
+
+    def run_count_since(self, commitment_id: str, since: float) -> int:
+        row = self._conn.execute(
+            "SELECT COUNT(*) AS n FROM task_runs WHERE commitment_id = ? AND run_at >= ?",
+            (commitment_id, since),
+        ).fetchone()
+        return int(row["n"])
+
+    def run_stats_for(self, commitment_id: str, *, days: int = 28) -> dict[str, Any]:
+        since = _utcnow() - days * 86400
+        rows = self._conn.execute(
+            "SELECT state, COUNT(*) AS n FROM task_runs"
+            " WHERE commitment_id = ? AND run_at >= ? GROUP BY state",
+            (commitment_id, since),
+        ).fetchall()
+        by_state = {r["state"]: int(r["n"]) for r in rows}
+        total = sum(by_state.values())
+        return {
+            "days": days,
+            "total": total,
+            "by_state": by_state,
+            "success_rate": (by_state.get("done", 0) / total) if total else None,
+        }
+
+    # ---------------------------------------------------------------- sessions
+
+    def ensure_session(self, session_id: str, title: str = "New conversation") -> None:
+        now = _utcnow()
+        self._conn.execute(
+            "INSERT INTO sessions (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)"
+            " ON CONFLICT(id) DO UPDATE SET updated_at = excluded.updated_at",
+            (session_id, title, now, now),
+        )
+        self._conn.commit()
+
+    def touch_session(self, session_id: str, *, title: str | None = None) -> None:
+        if title:
+            self._conn.execute(
+                "UPDATE sessions SET updated_at = ?, title = ? WHERE id = ?",
+                (_utcnow(), title, session_id),
+            )
+        else:
+            self._conn.execute(
+                "UPDATE sessions SET updated_at = ? WHERE id = ?", (_utcnow(), session_id)
+            )
+        self._conn.commit()
+
+    def list_sessions(self, *, limit: int = 30) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT s.*, (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS n"
+            " FROM sessions s ORDER BY s.updated_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "title": r["title"],
+                "created_at": iso(r["created_at"]),
+                "updated_at": iso(r["updated_at"]),
+                "messages": r["n"],
+            }
+            for r in rows
+        ]
+
+    # ------------------------------------------------------------ model usage
+
+    def record_model_call(
+        self,
+        *,
+        provider: str,
+        model: str,
+        purpose: str,
+        latency_s: float,
+        prompt_tokens: int,
+        completion_tokens: int,
+        cost_usd: float,
+        session_id: str | None = None,
+        finish_reason: str | None = None,
+        detail: dict[str, Any] | None = None,
+        at: float | None = None,
+    ) -> None:
+        self._conn.execute(
+            "INSERT INTO model_calls (at, provider, model, purpose, latency_s, prompt_tokens,"
+            " completion_tokens, cost_usd, session_id, finish_reason, detail)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                _utcnow() if at is None else float(at),
+                provider,
+                model,
+                purpose,
+                latency_s,
+                prompt_tokens,
+                completion_tokens,
+                cost_usd,
+                session_id,
+                finish_reason,
+                json.dumps(detail, ensure_ascii=False) if detail else None,
+            ),
+        )
+        self._conn.commit()
+
+    def usage_summary(self, *, days: int = 7) -> dict[str, Any]:
+        since = _utcnow() - days * 86400
+        totals = self._conn.execute(
+            "SELECT COUNT(*) AS calls, COALESCE(SUM(cost_usd), 0) AS cost,"
+            " COALESCE(AVG(latency_s), 0) AS latency,"
+            " COALESCE(SUM(prompt_tokens), 0) AS prompt,"
+            " COALESCE(SUM(completion_tokens), 0) AS completion"
+            " FROM model_calls WHERE at >= ?",
+            (since,),
+        ).fetchone()
+        by_purpose = self._conn.execute(
+            "SELECT purpose, COUNT(*) AS calls, COALESCE(SUM(cost_usd), 0) AS cost,"
+            " COALESCE(AVG(latency_s), 0) AS latency FROM model_calls"
+            " WHERE at >= ? GROUP BY purpose ORDER BY cost DESC",
+            (since,),
+        ).fetchall()
+        by_model = self._conn.execute(
+            "SELECT model, provider, COUNT(*) AS calls, COALESCE(SUM(cost_usd), 0) AS cost"
+            " FROM model_calls WHERE at >= ? GROUP BY model, provider ORDER BY calls DESC",
+            (since,),
+        ).fetchall()
+        by_day = self._conn.execute(
+            "SELECT date(at, 'unixepoch') AS day, COUNT(*) AS calls,"
+            " COALESCE(SUM(cost_usd), 0) AS cost FROM model_calls"
+            " WHERE at >= ? GROUP BY day ORDER BY day",
+            (since,),
+        ).fetchall()
+        return {
+            "days": days,
+            "calls": int(totals["calls"]),
+            "cost_usd": float(totals["cost"]),
+            "avg_latency_s": float(totals["latency"]),
+            "prompt_tokens": int(totals["prompt"]),
+            "completion_tokens": int(totals["completion"]),
+            "by_purpose": [dict(r) for r in by_purpose],
+            "by_model": [dict(r) for r in by_model],
+            "by_day": [dict(r) for r in by_day],
+        }
+
+    def model_calls(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM model_calls ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "at": iso(r["at"]),
+                "provider": r["provider"],
+                "model": r["model"],
+                "purpose": r["purpose"],
+                "latency_s": r["latency_s"],
+                "prompt_tokens": r["prompt_tokens"],
+                "completion_tokens": r["completion_tokens"],
+                "cost_usd": r["cost_usd"],
+                "finish_reason": r["finish_reason"],
+            }
+            for r in rows
+        ]
+
+    # ------------------------------------------------------------------ audit
+
+    def record_audit(
+        self,
+        *,
+        action: str,
+        decision: str,
+        target: str | None = None,
+        risk: str = "low",
+        actor: str = "mitra",
+        detail: Any = None,
+        at: datetime | str | float | None = None,
+    ) -> int:
+        cursor = self._conn.execute(
+            "INSERT INTO audit (at, actor, action, target, decision, risk, detail)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                _utcnow() if at is None else _to_epoch(at),
+                actor,
+                action,
+                target,
+                decision,
+                risk,
+                json.dumps(detail, ensure_ascii=False) if detail is not None else None,
+            ),
+        )
+        self._conn.commit()
+        return int(cursor.lastrowid or 0)
+
+    def audit_log(self, *, limit: int = 60, decision: str | None = None) -> list[dict[str, Any]]:
+        if decision:
+            rows = self._conn.execute(
+                "SELECT * FROM audit WHERE decision = ? ORDER BY id DESC LIMIT ?",
+                (decision, limit),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM audit ORDER BY id DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "at": iso(r["at"]),
+                "actor": r["actor"],
+                "action": r["action"],
+                "target": r["target"],
+                "decision": r["decision"],
+                "risk": r["risk"],
+                "detail": json.loads(r["detail"]) if r["detail"] else None,
+            }
+            for r in rows
+        ]
+
+    # -------------------------------------------------------------- proposals
+
+    def add_proposal(
+        self,
+        *,
+        kind: str,
+        page: str,
+        title: str,
+        body: str,
+        before: str = "",
+        after: str = "",
+        rationale: str = "",
+        source_refs: list[Any] | None = None,
+    ) -> int:
+        cursor = self._conn.execute(
+            "INSERT INTO proposals (at, kind, page, title, body, before, after, rationale,"
+            " source_refs, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')",
+            (
+                _utcnow(),
+                kind,
+                page,
+                title,
+                body,
+                before,
+                after or body,
+                rationale,
+                json.dumps(source_refs or [], ensure_ascii=False),
+            ),
+        )
+        self._conn.commit()
+        proposal_id = int(cursor.lastrowid or 0)
+        self.log_event("proposal_created", detail={"proposal_id": proposal_id, "page": page})
+        return proposal_id
+
+    def proposals(self, *, status: str | None = "pending", limit: int = 40) -> list[dict[str, Any]]:
+        if status is None:
+            rows = self._conn.execute(
+                "SELECT * FROM proposals ORDER BY id DESC LIMIT ?", (limit,)
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM proposals WHERE status = ? ORDER BY id DESC LIMIT ?",
+                (status, limit),
+            ).fetchall()
+        return [self._proposal_row(r) for r in rows]
+
+    def get_proposal(self, proposal_id: int) -> dict[str, Any]:
+        row = self._conn.execute("SELECT * FROM proposals WHERE id = ?", (proposal_id,)).fetchone()
+        if row is None:
+            raise NotFoundError(f"proposal {proposal_id} not found")
+        return self._proposal_row(row)
+
+    @staticmethod
+    def _proposal_row(row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "id": row["id"],
+            "at": iso(row["at"]),
+            "kind": row["kind"],
+            "page": row["page"],
+            "title": row["title"],
+            "body": row["body"],
+            "before": row["before"],
+            "after": row["after"],
+            "rationale": row["rationale"],
+            "source_refs": json.loads(row["source_refs"] or "[]"),
+            "status": row["status"],
+            "decided_at": iso(row["decided_at"]) if row["decided_at"] else None,
+        }
+
+    def decide_proposal(self, proposal_id: int, *, decision: str) -> None:
+        if decision not in {"approved", "rejected"}:
+            raise ValueError("decision must be 'approved' or 'rejected'")
+        self._conn.execute(
+            "UPDATE proposals SET status = ?, decided_at = ? WHERE id = ?",
+            (decision, _utcnow(), proposal_id),
+        )
+        self._conn.commit()
+        self.record_audit(
+            action="memory_proposal",
+            target=f"proposal:{proposal_id}",
+            decision=decision,
+            risk="medium",
+            actor="user",
+        )
+        self.log_event(
+            "proposal_decided", detail={"proposal_id": proposal_id, "decision": decision}
+        )
+
+    # -------------------------------------------------------------- approvals
+
+    def add_approval(
+        self, *, tool: str, args: dict[str, Any], session_id: str | None = None
+    ) -> int:
+        cursor = self._conn.execute(
+            "INSERT INTO approvals (at, tool, args, session_id, status) VALUES (?, ?, ?, ?, 'pending')",
+            (_utcnow(), tool, json.dumps(args, ensure_ascii=False), session_id),
+        )
+        self._conn.commit()
+        return int(cursor.lastrowid or 0)
+
+    def approvals(self, *, status: str | None = "pending") -> list[dict[str, Any]]:
+        if status is None:
+            rows = self._conn.execute(
+                "SELECT * FROM approvals ORDER BY id DESC LIMIT 50"
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM approvals WHERE status = ? ORDER BY id DESC LIMIT 50",
+                (status,),
+            ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "at": iso(r["at"]),
+                "tool": r["tool"],
+                "args": json.loads(r["args"] or "{}"),
+                "session_id": r["session_id"],
+                "status": r["status"],
+                "decided_at": iso(r["decided_at"]) if r["decided_at"] else None,
+                "result": json.loads(r["result"]) if r["result"] else None,
+            }
+            for r in rows
+        ]
+
+    def decide_approval(self, approval_id: int, *, decision: str) -> None:
+        if decision not in {"approved", "denied"}:
+            raise ValueError("decision must be 'approved' or 'denied'")
+        self._conn.execute(
+            "UPDATE approvals SET status = ?, decided_at = ? WHERE id = ?",
+            (decision, _utcnow(), approval_id),
+        )
+        self._conn.commit()
+        self.record_audit(
+            action="tool_approval",
+            target=f"approval:{approval_id}",
+            decision=decision,
+            risk="high",
+            actor="user",
+        )
+
+    # ------------------------------------------------------------------ notes
+
+    def add_note(
+        self, *, title: str, body: str, path: str | None = None, tags: list[str] | None = None
+    ) -> int:
+        cursor = self._conn.execute(
+            "INSERT INTO notes (at, title, body, path, tags) VALUES (?, ?, ?, ?, ?)",
+            (_utcnow(), title, body, path, json.dumps(tags or [], ensure_ascii=False)),
+        )
+        self._conn.commit()
+        return int(cursor.lastrowid or 0)
+
+    def notes(self, *, limit: int = 30) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM notes ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "at": iso(r["at"]),
+                "title": r["title"],
+                "body": r["body"],
+                "path": r["path"],
+                "tags": json.loads(r["tags"] or "[]"),
+            }
+            for r in rows
+        ]
+
+    # --------------------------------------------------------------- counters
+
+    def run_stats(self, *, days: int = 7) -> dict[str, Any]:
+        since = _utcnow() - days * 86400
+        rows = self._conn.execute(
+            "SELECT state, COUNT(*) AS n FROM task_runs WHERE run_at >= ? GROUP BY state",
+            (since,),
+        ).fetchall()
+        by_state = {r["state"]: int(r["n"]) for r in rows}
+        total = sum(by_state.values())
+        good = by_state.get("done", 0)
+        return {
+            "days": days,
+            "total": total,
+            "by_state": by_state,
+            "success_rate": (good / total) if total else None,
+            "failed": by_state.get("failed", 0),
+            "delivery_failed": by_state.get("delivery_failed", 0),
+        }
+
+    def intervention_counts(self, *, since: float) -> dict[str, int]:
+        """O4: how much the human had to step in (approvals, manual note edits)."""
+        proposal = self._conn.execute(
+            "SELECT COUNT(*) AS n FROM proposals WHERE decided_at IS NOT NULL AND decided_at >= ?",
+            (since,),
+        ).fetchone()
+        approval = self._conn.execute(
+            "SELECT COUNT(*) AS n FROM approvals WHERE decided_at IS NOT NULL AND decided_at >= ?",
+            (since,),
+        ).fetchone()
+        manual_runs = self._conn.execute(
+            "SELECT COUNT(*) AS n FROM audit WHERE action = 'manual_run' AND at >= ?",
+            (since,),
+        ).fetchone()
+        return {
+            "memory_decisions": int(proposal["n"]),
+            "tool_approvals": int(approval["n"]),
+            "manual_runs": int(manual_runs["n"]),
+        }

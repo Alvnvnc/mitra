@@ -61,9 +61,7 @@ class SelfModel:
 
     def _path(self, name: str) -> Path:
         if not _NAME_RE.match(name):
-            raise ValueError(
-                f"invalid page name {name!r}: lowercase [a-z0-9_-], must end in .md"
-            )
+            raise ValueError(f"invalid page name {name!r}: lowercase [a-z0-9_-], must end in .md")
         return self.root / name
 
     def exists(self, name: str) -> bool:
@@ -76,17 +74,13 @@ class SelfModel:
         frontmatter, body = _split_frontmatter(path.read_text(encoding="utf-8"))
         return Page(name=name, frontmatter=frontmatter, body=body)
 
-    def write(
-        self, name: str, body: str, *, frontmatter: dict[str, Any] | None = None
-    ) -> Path:
+    def write(self, name: str, body: str, *, frontmatter: dict[str, Any] | None = None) -> Path:
         path = self._path(name)
         metadata = dict(frontmatter or {})
         metadata.setdefault("updated", datetime.now(UTC).isoformat(timespec="seconds"))
         header = yaml.safe_dump(metadata, allow_unicode=True, sort_keys=False).strip()
         text = (
-            f"---\n{header}\n---\n\n{body.rstrip()}\n"
-            if body.strip()
-            else f"---\n{header}\n---\n"
+            f"---\n{header}\n---\n\n{body.rstrip()}\n" if body.strip() else f"---\n{header}\n---\n"
         )
         tmp = path.with_name(path.name + ".tmp")
         tmp.write_text(text, encoding="utf-8")

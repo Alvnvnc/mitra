@@ -60,7 +60,10 @@ def run_forever(
     try:
         while True:
             for outcome in tick(
-                ledger, router=router, repo_root=repo_root, outbox_dir=outbox_dir,
+                ledger,
+                router=router,
+                repo_root=repo_root,
+                outbox_dir=outbox_dir,
                 sender=sender,
             ):
                 print(f"[scheduler] {outcome.commitment_id} -> {outcome.state}: {outcome.detail}")

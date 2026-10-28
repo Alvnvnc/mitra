@@ -50,6 +50,16 @@ class Settings(BaseSettings):
     # --- Tools ---
     tavily_api_key: str = ""
 
+    # --- Runtime ---
+    # auto  = Nebius when a key is present, local demo model otherwise
+    # nebius = always Nebius (fail loudly)
+    # demo  = always the deterministic local model
+    mitra_provider: str = "auto"
+    mitra_demo_mode: bool = False
+    mitra_dashboard_token: str = ""  # optional shared secret for a public demo
+    mitra_daily_budget_usd: float = 0.50
+    mitra_timezone: str = "Asia/Jakarta"
+
     # --- Misc ---
     mitra_data_dir: Path = REPO_ROOT / "data"
     log_level: str = "INFO"

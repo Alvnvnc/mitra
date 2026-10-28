@@ -42,10 +42,7 @@ def send_telegram(
         return DeliveryResult(False, "telegram", error="TELEGRAM_BOT_TOKEN belum diisi")
 
     chat_id = (
-        chat_id
-        or os.environ.get("TELEGRAM_CHAT_ID")
-        or os.environ.get("TELEGRAM_TARGET")
-        or ""
+        chat_id or os.environ.get("TELEGRAM_CHAT_ID") or os.environ.get("TELEGRAM_TARGET") or ""
     ).strip()
     if not chat_id:
         return DeliveryResult(False, "telegram", error="TELEGRAM_CHAT_ID/TARGET belum diisi")

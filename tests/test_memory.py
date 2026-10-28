@@ -16,9 +16,12 @@ def _setup(tmp_path):
 
 # ------------------------------------------------------------- self-model
 
+
 def test_selfmodel_roundtrip(tmp_path):
     selfmodel = SelfModel(tmp_path / "sm")
-    selfmodel.write("projects.md", "# Proyek\n\n- Mitra: hackathon", frontmatter={"title": "Projects"})
+    selfmodel.write(
+        "projects.md", "# Proyek\n\n- Mitra: hackathon", frontmatter={"title": "Projects"}
+    )
 
     page = selfmodel.read("projects.md")
     assert page.frontmatter["title"] == "Projects"
@@ -52,6 +55,7 @@ def test_selfmodel_overwrite_is_complete(tmp_path):
 
 # ------------------------------------------------------------- messages
 
+
 def test_messages_log_and_session_filter(tmp_path):
     ledger, _ = _setup(tmp_path)
     ledger.log_message("s1", "user", "ingatkan menyiram tanaman besok")
@@ -77,6 +81,7 @@ def test_messages_fts_search(tmp_path):
 
 
 # ------------------------------------------------------------- retrieval
+
 
 def test_build_context_pins_priorities_and_finds_query_match(tmp_path):
     ledger, selfmodel = _setup(tmp_path)

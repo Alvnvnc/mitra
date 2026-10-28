@@ -81,7 +81,9 @@ def build_context(
     if not messages:
         messages = ledger.messages(limit=k_messages)
     for message in reversed(messages):  # oldest → newest within the selection
-        items.append((f"message:{message.session_id}#{message.id}", f"[{message.role}] {message.content}"))
+        items.append(
+            (f"message:{message.session_id}#{message.id}", f"[{message.role}] {message.content}")
+        )
 
     # assemble within budget
     blocks: list[str] = []

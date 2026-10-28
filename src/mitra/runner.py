@@ -48,20 +48,20 @@ def _write_notice(
     ts = datetime.now(UTC)
     path = outbox / f"NOTICE-{ts:%Y%m%d-%H%M%S}-{run_id[-6:]}.md"
     lines = [
-        "# Gangguan komitmen",
+        "# Commitment disruption",
         "",
-        f"- komitmen: {commitment_title} (`{commitment_id}`)",
+        f"- commitment: {commitment_title} (`{commitment_id}`)",
         f"- run: `{run_id}`",
-        f"- tahap: {stage}",
-        f"- waktu: {ts.isoformat(timespec='seconds')}",
+        f"- stage: {stage}",
+        f"- time: {ts.isoformat(timespec='seconds')}",
         f"- error: {error}",
     ]
     if artifact is not None:
-        lines.append(f"- hasil (tetap tersimpan): `{artifact}`")
+        lines.append(f"- result (still stored): `{artifact}`")
     lines += [
         "",
-        "Aksi: periksa lalu jalankan ulang komitmen ini.",
-        "Catatan: kegagalan pengiriman tidak membatalkan hasil yang sudah terverifikasi.",
+        "Action: inspect, then re-run this commitment.",
+        "Note: a delivery failure does not invalidate a verified result.",
     ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     ledger.log_event(
@@ -86,6 +86,7 @@ def run_commitment_once(
     outbox_dir: str | Path | None = None,
     sender: object | None = None,
     skill_override: object | None = None,
+    toolbox: object | None = None,
     now: datetime | None = None,
 ) -> RunOutcome:
     commitment = ledger.get_commitment(commitment_id)
@@ -107,6 +108,9 @@ def run_commitment_once(
         router=router,
         repo_root=Path(repo_root) if repo_root else REPO_ROOT,
         artifacts_dir=data_dir / "artifacts",
+        ledger=ledger,
+        tools=toolbox,
+        data_dir=data_dir,
     )
 
     # --- execute (process stage) -------------------------------------------
@@ -116,8 +120,13 @@ def run_commitment_once(
         error = f"exec error: {type(exc).__name__}: {exc}"
         ledger.fail_run(run_id, error)
         notice = _write_notice(
-            ledger, outbox, commitment.title, commitment_id, run_id,
-            stage="process", error=error,
+            ledger,
+            outbox,
+            commitment.title,
+            commitment_id,
+            run_id,
+            stage="process",
+            error=error,
         )
         return RunOutcome(run_id, commitment_id, instruction.id, "failed", error, notice)
 
@@ -126,23 +135,28 @@ def run_commitment_once(
         run_id,
         kind="facts",
         path=getattr(result, "facts_path", None),
-        summary="fakta aktivitas (sumber ringkasan)",
+        summary="activity facts (summary sources)",
     )
     ev_artifact = ledger.record_evidence(
         run_id,
         kind="artifact",
         path=getattr(result, "artifact_path", None),
-        summary="hasil ringkasan",
+        summary="summary artifact",
     )
     passed, check_detail = skill.verify(instruction, result)
     for evidence_id in (ev_facts, ev_artifact):
         ledger.check_evidence(evidence_id, passed=passed, detail=check_detail)
     if not passed:
-        error = f"evidence check gagal: {check_detail}"
+        error = f"evidence check failed: {check_detail}"
         ledger.fail_run(run_id, error)
         notice = _write_notice(
-            ledger, outbox, commitment.title, commitment_id, run_id,
-            stage="evidence", error=error,
+            ledger,
+            outbox,
+            commitment.title,
+            commitment_id,
+            run_id,
+            stage="evidence",
+            error=error,
             artifact=getattr(result, "artifact_path", None),
         )
         return RunOutcome(run_id, commitment_id, instruction.id, "failed", error, notice)
@@ -154,15 +168,23 @@ def run_commitment_once(
     if delivery.ok:
         ledger.record_delivery(run_id, delivery.receipt or {"lane": delivery.lane})
         return RunOutcome(
-            run_id, commitment_id, instruction.id, "done",
-            f"terkirim via {delivery.lane}: {delivery.receipt or {}}",
+            run_id,
+            commitment_id,
+            instruction.id,
+            "done",
+            f"delivered via {delivery.lane}: {delivery.receipt or {}}",
         )
 
     error = delivery.error or "delivery failed (unknown reason)"
     ledger.mark_delivery_failed(run_id, error)
     notice = _write_notice(
-        ledger, outbox, commitment.title, commitment_id, run_id,
-        stage="delivery", error=error,
+        ledger,
+        outbox,
+        commitment.title,
+        commitment_id,
+        run_id,
+        stage="delivery",
+        error=error,
         artifact=getattr(result, "artifact_path", None),
     )
     return RunOutcome(run_id, commitment_id, instruction.id, "delivery_failed", error, notice)

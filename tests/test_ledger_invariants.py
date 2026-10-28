@@ -37,6 +37,7 @@ def _approved(ledger: Ledger, commitment_id: str, *, content: str, effective_fro
 
 # --------------------------------------------------------------------- O1
 
+
 def test_resolve_returns_latest_effective_version(tmp_path):
     ledger = _ledger(tmp_path)
     cid = _commitment(ledger)
@@ -68,6 +69,7 @@ def test_no_active_instruction_blocks_resolution(tmp_path):
 
 # --------------------------------------------------------------------- O2
 
+
 def test_completion_requires_passed_evidence(tmp_path):
     ledger = _ledger(tmp_path)
     cid = _commitment(ledger)
@@ -96,6 +98,7 @@ def test_completion_requires_passed_evidence(tmp_path):
 
 
 # --------------------------------------------------------------------- O3
+
 
 def test_delivery_is_separate_state(tmp_path):
     ledger = _ledger(tmp_path)
@@ -141,6 +144,7 @@ def test_due_once_per_day(tmp_path):
 
 # --------------------------------------------------------- pipeline (offline)
 
+
 class _FakeSkill:
     name = "fake"
 
@@ -185,8 +189,12 @@ def test_runner_blocks_run_without_instruction(tmp_path):
     ledger = _ledger(tmp_path)
     cid = _commitment(ledger)
     outcome = run_commitment_once(
-        ledger, cid, router=None, repo_root=tmp_path,
-        outbox_dir=tmp_path / "outbox", skill_override=_FakeSkill(),
+        ledger,
+        cid,
+        router=None,
+        repo_root=tmp_path,
+        outbox_dir=tmp_path / "outbox",
+        skill_override=_FakeSkill(),
     )
     assert outcome.state == "blocked"
     assert outcome.run_id is None
@@ -195,8 +203,14 @@ def test_runner_blocks_run_without_instruction(tmp_path):
 def test_runner_delivery_failure_surfaces_notice(tmp_path):
     ledger, cid, now = _prepare_run(tmp_path)
     outcome = run_commitment_once(
-        ledger, cid, router=None, repo_root=tmp_path, outbox_dir=tmp_path / "outbox",
-        sender=_failing_sender, skill_override=_FakeSkill(), now=now,
+        ledger,
+        cid,
+        router=None,
+        repo_root=tmp_path,
+        outbox_dir=tmp_path / "outbox",
+        sender=_failing_sender,
+        skill_override=_FakeSkill(),
+        now=now,
     )
     assert outcome.state == "delivery_failed"
     run = ledger.get_run(outcome.run_id)
@@ -212,8 +226,14 @@ def test_runner_delivery_failure_surfaces_notice(tmp_path):
 def test_runner_success_records_receipt(tmp_path):
     ledger, cid, now = _prepare_run(tmp_path)
     outcome = run_commitment_once(
-        ledger, cid, router=None, repo_root=tmp_path, outbox_dir=tmp_path / "outbox",
-        sender=_passing_sender, skill_override=_FakeSkill(), now=now,
+        ledger,
+        cid,
+        router=None,
+        repo_root=tmp_path,
+        outbox_dir=tmp_path / "outbox",
+        sender=_passing_sender,
+        skill_override=_FakeSkill(),
+        now=now,
     )
     assert outcome.state == "done"
     run = ledger.get_run(outcome.run_id)
@@ -225,12 +245,18 @@ def test_runner_success_records_receipt(tmp_path):
 def test_runner_rejects_failed_evidence(tmp_path):
     ledger, cid, now = _prepare_run(tmp_path)
     outcome = run_commitment_once(
-        ledger, cid, router=None, repo_root=tmp_path, outbox_dir=tmp_path / "outbox",
-        sender=_passing_sender, skill_override=_FailingSkill(), now=now,
+        ledger,
+        cid,
+        router=None,
+        repo_root=tmp_path,
+        outbox_dir=tmp_path / "outbox",
+        sender=_passing_sender,
+        skill_override=_FailingSkill(),
+        now=now,
     )
     assert outcome.state == "failed"
     run = ledger.get_run(outcome.run_id)
     assert run.state == "failed"
-    assert "evidence check gagal" in (run.error or "")
+    assert "evidence check failed" in (run.error or "")
     assert "completion_claimed" not in [event["kind"] for event in ledger.events()]
     assert outcome.notice_path is not None and outcome.notice_path.exists()
