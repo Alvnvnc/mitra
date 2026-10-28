@@ -117,3 +117,25 @@ def test_chat_stream_returns_events(client):
 def test_unknown_memory_page_is_404(client):
     assert client.get("/api/memory/../../etc/passwd").status_code in {404, 400}
     assert client.put("/api/memory/secrets.md", json={"body": "x"}).status_code == 404
+
+
+def test_demo_reset_reseeds_in_place(tmp_path, monkeypatch):
+    """Reset must work when the data dir is a mount point (container volume)."""
+    from mitra.demo_data import seed
+
+    data = tmp_path / "data"
+    seed(data)
+    marker = data / "keepme.txt"
+    marker.write_text("stale", encoding="utf-8")
+
+    from mitra.web.app import create_app
+
+    app = create_app(data)
+    app.state.runtime.settings.mitra_demo_mode = True
+    client = TestClient(app)
+    response = client.post("/api/demo/reset", json={})
+    assert response.status_code == 200
+    assert not marker.exists()
+    body = response.json()
+    assert len(body["commitments"]) == 4
+    assert len(body["proposals"]) >= 1

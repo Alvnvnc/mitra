@@ -399,7 +399,13 @@ def _insert_run(
 def seed(data_dir: str | Path, *, fresh: bool = False) -> Path:
     root = Path(data_dir)
     if fresh and root.exists():
-        shutil.rmtree(root)
+        # Clear the contents instead of the directory itself: the data dir is a
+        # volume mount in the container and cannot be removed, only emptied.
+        for child in root.iterdir():
+            if child.is_dir() and not child.is_symlink():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
     root.mkdir(parents=True, exist_ok=True)
     (root / "artifacts").mkdir(exist_ok=True)
     (root / "outbox").mkdir(exist_ok=True)
