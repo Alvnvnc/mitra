@@ -91,6 +91,9 @@
       <div class="crumbs" id="crumbs">
         <span class="crumb-current">Today</span>
       </div>
+      <button class="palette-trigger" id="paletteBtn" type="button">
+        <svg class="ico"><use href="#i-search"/></svg><span>Search</span><kbd>⌘K</kbd>
+      </button>
       <div class="topbar-right">
         <span class="live-pill" id="livePill" title="Data refreshes on demand"><span class="dot"></span><span id="clock">—</span></span>
         <button class="btn btn-primary btn-sm" id="newCommitmentTop" type="button">
@@ -100,7 +103,7 @@
     </header>
     <div class="demo-banner" id="demoBanner" hidden>
       <strong>Synthetic demo instance.</strong>
-      <span>Every person, run and cost below is fictional sample data; the ledger, evidence gate and policy engine are the real ones.</span>
+      <span>People, runs and costs below are fictional; the ledger, evidence gate and policy engine are real code.</span>
     </div>
     <section class="view" id="view" tabindex="-1" aria-live="polite"></section>
   </main>

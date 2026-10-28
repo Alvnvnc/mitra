@@ -7,7 +7,7 @@ const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 const state = {
   boot: null,
   view: "today",
-  chat: { sessionId: null, messages: [], busy: false, sources: [], trace: [] },
+  chat: { sessionId: null, messages: [], busy: false, sources: [], trace: [], draft: false },
   memory: { page: "priorities.md", cache: {}, editing: false },
   audit: { tab: "decisions", filter: "all", rows: null, calls: null },
   stats: { days: 7, data: null },
@@ -94,52 +94,65 @@ function inline(text) {
 function md(src) {
   const text = String(src ?? "");
   if (!text.trim()) return '<p class="muted">Empty page.</p>';
-  const lines = esc(text).split("\n");
+  const lines = text.split("\n").map((line) => line.replace(/\s+$/, ""));
   const out = [];
+  const html = (value) => inline(esc(value));
   let para = [];
   let list = null;
+  let quote = null;
   let code = null;
 
   const flushPara = () => {
     if (para.length) {
-      out.push("<p>" + inline(para.join(" ")) + "</p>");
+      out.push("<p>" + html(para.join(" ")) + "</p>");
       para = [];
     }
   };
   const flushList = () => {
     if (list) {
-      out.push("<" + list.tag + ">" + list.items.map((i) => "<li>" + inline(i) + "</li>").join("") + "</" + list.tag + ">");
+      out.push("<" + list.tag + ">" + list.items.map((i) => "<li>" + html(i) + "</li>").join("") + "</" + list.tag + ">");
       list = null;
     }
   };
+  const flushQuote = () => {
+    if (quote) {
+      out.push("<blockquote>" + html(quote.join(" ")) + "</blockquote>");
+      quote = null;
+    }
+  };
+  const flushAll = () => { flushPara(); flushList(); flushQuote(); };
 
-  for (const raw of lines) {
-    const line = raw.replace(/\s+$/, "");
+  for (const line of lines) {
     if (line.startsWith("```")) {
-      flushPara(); flushList();
+      flushAll();
       if (code === null) code = [];
-      else { out.push("<pre><code>" + code.join("\n") + "</code></pre>"); code = null; }
+      else { out.push("<pre><code>" + esc(code.join("\n")) + "</code></pre>"); code = null; }
       continue;
     }
     if (code !== null) { code.push(line); continue; }
-    if (!line.trim()) { flushPara(); flushList(); continue; }
+    if (!line.trim()) { flushAll(); continue; }
     const h = line.match(/^(#{1,3})\s+(.*)$/);
-    if (h) { flushPara(); flushList(); out.push("<h" + h[1].length + ">" + inline(h[2]) + "</h" + h[1].length + ">"); continue; }
-    if (/^---+$/.test(line.trim())) { flushPara(); flushList(); out.push("<hr>"); continue; }
-    if (/^>\s?/.test(line)) { flushPara(); flushList(); out.push("<blockquote>" + inline(line.replace(/^>\s?/, "")) + "</blockquote>"); continue; }
+    if (h) { flushAll(); out.push("<h" + h[1].length + ">" + html(h[2]) + "</h" + h[1].length + ">"); continue; }
+    if (/^---+$/.test(line.trim())) { flushAll(); out.push("<hr>"); continue; }
+    if (/^>\s?/.test(line)) {
+      flushPara(); flushList();
+      quote = quote || [];
+      quote.push(line.replace(/^>\s?/, ""));
+      continue;
+    }
     const ul = line.match(/^[-*]\s+(.*)$/);
     const ol = line.match(/^\d+\.\s+(.*)$/);
     if (ul || ol) {
-      flushPara();
+      flushPara(); flushQuote();
       const tag = ul ? "ul" : "ol";
       if (!list || list.tag !== tag) { flushList(); list = { tag, items: [] }; }
-      list.items.push((ul ? ul[1] : ol[1]));
+      list.items.push(ul ? ul[1] : ol[1]);
       continue;
     }
     para.push(line.trim());
   }
-  flushPara(); flushList();
-  if (code !== null) out.push("<pre><code>" + code.join("\n") + "</code></pre>");
+  flushPara(); flushList(); flushQuote();
+  if (code !== null) out.push("<pre><code>" + esc(code.join("\n")) + "</code></pre>");
   return out.join("\n");
 }
 
@@ -269,7 +282,16 @@ function updateShell() {
   $("#providerState").textContent = live ? "live inference" : "demo fallback";
   $("#demoBanner").hidden = !state.boot.app.demo_mode;
   $("#resetDemo").hidden = !state.boot.app.demo_mode;
+  syncBannerHeight();
 }
+
+function syncBannerHeight() {
+  const banner = $("#demoBanner");
+  const height = banner && !banner.hidden ? banner.offsetHeight : 0;
+  document.documentElement.style.setProperty("--banner-h", height + "px");
+}
+
+window.addEventListener("resize", syncBannerHeight);
 
 function updateClock() {
   if (!state.boot) return;
@@ -282,6 +304,7 @@ function updateClock() {
 
 function setView(name, crumb) {
   state.view = name;
+  $("#view").classList.toggle("chat-view", name === "chat");
   $$("[data-nav]").forEach((el) => el.classList.toggle("active", el.dataset.nav === name));
   $("#crumbs").innerHTML = crumb || '<span class="crumb-current">' + esc(name) + "</span>";
 }
@@ -291,6 +314,8 @@ function route() {
   const hash = location.hash.replace(/^#\/?/, "") || "today";
   const [section, id] = hash.split("/");
   closeDrawer();
+  const main = $("#main");
+  if (main) main.scrollTop = 0;
   if (section === "chat") { setView("chat", '<span class="crumb-current">Chat</span>'); renderChat(); return; }
   if (section === "commitments" && id) {
     setView("commitments", '<span>Commitments</span><span class="sep">/</span><span class="crumb-current">Detail</span>');
@@ -374,13 +399,10 @@ function renderToday() {
   const active = b.commitments.filter((c) => c.state === "active");
   const failed = b.commitments.filter((c) => c.latest_run && ["failed", "delivery_failed"].includes(c.latest_run.state));
   const verified = b.commitments.filter((c) => c.latest_run?.state === "done").length;
-  const days = (b.usage.by_day || []).slice(-14);
-  const maxCall = Math.max(1, ...days.map((d) => d.calls));
-  const sparks = days.map((d) => '<span style="height:' + Math.max(10, (d.calls / maxCall) * 100) + '%"></span>').join("");
 
   const kpis =
-    '<div class="grid grid-4">' +
-    kpi("Runs · 7 days", String(stats.total), '<small>runs</small>', "evidence gate on every one", "accent-green", sparks) +
+    '<div class="stat-strip">' +
+    kpi("Runs · 7 days", String(stats.total), "runs", "evidence gate on every one", "accent-green") +
     kpi("Verified", pct(stats.success_rate), "", (stats.failed || 0) + " failed · " + (stats.delivery_failed || 0) + " delivery", stats.success_rate >= 0.8 ? "accent-green" : "accent-amber") +
     kpi("Needs you", String(needsCount()), "", items.length ? "memory + tool decisions" : "inbox is clear", items.length ? "accent-amber" : "accent-green") +
     kpi("Inference · 7d", money(b.usage.cost_usd), "", b.usage.calls + " calls · " + (b.usage.avg_latency_s || 0).toFixed(1) + "s avg", "accent-amber") +
@@ -422,7 +444,7 @@ function renderToday() {
     );
   }).join("");
 
-  const activity = (b.events || []).slice(0, 10).map((event) => {
+  const activity = (b.events || []).filter((e) => e.kind !== "demo_seeded").slice(0, 8).map((event) => {
     const color = /fail|error|denied/.test(event.kind) ? "red" : /deliver|run/.test(event.kind) ? "green" : /proposal|instruction/.test(event.kind) ? "blue" : "";
     return '<li><span class="act-dot ' + color + '"></span><div><div class="act-main"><b>' +
       esc(event.kind.replaceAll("_", " ")) + "</b> " + esc(summarizeEvent(event)) + "</div>" +
@@ -440,7 +462,9 @@ function renderToday() {
     kpis +
     '<div class="split" style="margin-top:20px"><div class="stack">' +
     '<section class="panel"><div class="panel-head"><h3>Needs you</h3><span class="hint">' + items.length + " open</span></div>" + needHtml + "</section>" +
-    '<section class="panel"><div class="panel-head"><h3>Commitments</h3><a class="hint" href="#/commitments">All commitments →</a></div><div class="commit-list">' + rows + "</div></section>" +
+    '<section class="panel"><div class="panel-head"><h3>Commitments</h3><a class="hint" href="#/commitments">All commitments →</a></div>' +
+    '<div class="commit-head" aria-hidden="true"><span>Commitment</span><span class="col-schedule">Schedule</span><span class="col-version">Version</span><span>Last run</span><span></span></div>' +
+    '<div class="commit-list">' + rows + "</div></section>" +
     "</div>" +
     '<div class="stack">' +
     '<section class="panel"><div class="panel-head"><h3>Latest verified brief</h3><span class="hint" id="briefHint">loading…</span></div><div class="brief" id="briefBody"><div class="skeleton" style="height:96px"></div></div></section>' +
@@ -450,10 +474,10 @@ function renderToday() {
   loadBrief();
 }
 
-function kpi(label, value, suffix, meta, accent, spark) {
+function kpi(label, value, suffix, meta, accent) {
   return (
     '<div class="kpi ' + accent + '"><div class="kpi-label">' + esc(label) + '</div><div class="kpi-value">' +
-    esc(value) + (suffix || "") + '</div>' + (spark ? '<div class="spark">' + spark + "</div>" : "") +
+    esc(value) + (suffix ? "<small>" + esc(suffix) + "</small>" : "") + "</div>" +
     '<div class="kpi-meta">' + esc(meta) + "</div></div>"
   );
 }
@@ -464,7 +488,9 @@ function summarizeEvent(event) {
   if (event.kind === "delivery_failed") return detail.error ? String(detail.error).slice(0, 90) : "";
   if (event.kind === "completion_claimed") return "evidence gate passed";
   if (event.kind === "proposal_created") return "for " + (detail.page ?? "memory");
-  if (event.kind === "proposal_decided") return "#" + (detail.proposal_id ?? "") + " " + (detail.decision ?? "");
+  if (event.kind === "proposal_decided") {
+    return "#" + (detail.proposal_id ?? "") + " " + (detail.decision ?? "") + (detail.page ? " · " + detail.page : "");
+  }
   if (event.kind === "memory_applied") return "memory updated: " + (detail.page ?? "");
   if (event.kind === "memory_user_edit") return "you edited " + (detail.page ?? "");
   if (event.kind === "chat_reply") return "reply via " + (detail.provider === "demo" ? "local demo model" : detail.provider || "model");
@@ -472,7 +498,6 @@ function summarizeEvent(event) {
   if (event.kind === "consolidation_run") return (detail.created?.length ?? detail.created ?? 0) + " proposal(s) from a " + (detail.window ?? "24h") + " window";
   if (event.kind === "instruction_added") return "v" + (detail.version_id ?? "") + " in force from " + fmtDate(detail.effective_from);
   if (event.kind === "run_created") return "instruction v" + (detail.instruction_version_id ?? "");
-  if (event.kind === "demo_seeded") return (detail.commitments || 0) + " synthetic commitments";
   if (event.kind === "commitment_created") return "“" + (detail.title ?? "") + "”";
   if (event.kind === "commitment_state") return "→ " + (detail.state || "");
   if (event.kind === "note_written") return "note " + (detail.note_id ?? "");
@@ -512,7 +537,7 @@ async function loadBrief() {
 
 async function renderChat() {
   const sessions = state.boot.sessions || [];
-  if (!state.chat.sessionId) {
+  if (!state.chat.sessionId && !state.chat.draft) {
     state.chat.sessionId = sessions[0]?.id || null;
     state.chat.messages = [];
   }
@@ -526,7 +551,7 @@ async function renderChat() {
       esc(s.title) + '<span class="s-meta">' + relTime(s.updated_at) + " · " + s.messages + " msg</span></button>").join("")
       : '<p class="ctx-note" style="padding:8px">No conversations yet.</p>') +
     "</div></aside>" +
-    '<section class="chat-main"><header class="chat-head"><button class="icon-btn chat-list-btn" data-act="chat-sessions" aria-label="Conversations"><svg class="ico"><use href="#i-menu"/></svg></button><div><h1>' + esc(active?.title || "New conversation") + '</h1><div class="mono">' +
+    '<section class="chat-main"><header class="chat-head"><button class="icon-btn chat-list-btn" data-act="chat-sessions" aria-label="Conversations"><svg class="ico"><use href="#i-chat"/></svg></button><div><h1>' + esc(active?.title || "New conversation") + '</h1><div class="mono">' +
     esc(state.chat.sessionId || "draft") + "</div></div><div class=\"spacer\"></div>" + providerTag() + "</header>" +
     '<div class="chat-scroll" id="chatScroll"><div class="chat-inner" id="chatInner">' + chatBody() + "</div></div>" +
     '<div class="composer"><div class="composer-inner"><div class="composer-box"><textarea id="chatInput" rows="1" placeholder="Ask about a commitment, a memory, or search the web…" aria-label="Message"></textarea><button class="send-btn" id="sendBtn" aria-label="Send"><svg class="ico"><use href="#i-send"/></svg></button></div>' +
@@ -595,7 +620,7 @@ function messageMarkup(message) {
     '<span>· ' + (message.at ? fmtTime(message.at) : "now") + "</span></div>" +
     '<div class="agent-body md">' + md(message.content) + "</div>" +
     (sources.length ? '<div class="source-chips">' + sources.slice(0, 6).map((s) => '<span class="tag">' + esc(s) + "</span>").join("") + "</div>" : "") +
-    (trace.length ? '<details class="trace"><summary>trace · ' + trace.length + " steps</summary><div class=\"trace-list\">" +
+    (trace.length ? '<details class="trace"><summary><svg class="ico"><use href="#i-chevron"/></svg><span>Trace · ' + trace.length + " steps</span></summary><div class=\"trace-list\">" +
       trace.map((t) => '<div class="trace-row"><span class="t-stage">' + esc(t.stage) + "</span><span>" + esc(t.label) + "</span></div>").join("") +
       "</div></details>" : "") +
     "</div></div>"
@@ -638,6 +663,7 @@ async function sendChat(textOverride) {
   if (!state.chat.sessionId) {
     try {
       const created = await api("/api/sessions", { method: "POST", body: JSON.stringify({ title: text.slice(0, 60) }) });
+      state.chat.draft = false;
       state.chat.sessionId = created.session_id;
     } catch (err) {
       toast(err.message, "error");
@@ -780,6 +806,7 @@ async function refreshBootBadges() {
 
 async function openSession(id) {
   if (state.chat.busy) return;
+  state.chat.draft = false;
   state.chat.sessionId = id;
   state.chat.messages = [];
   state.chat.sources = [];
@@ -794,22 +821,21 @@ function renderCommitments() {
   const rows = list.map((c) => {
     const run = c.latest_run;
     return '<tr class="clickable" data-act="open-commitment" data-id="' + esc(c.id) + '">' +
-      '<td><div class="cell-strong">' + esc(c.title) + "</div><div class=\"cell-sub mono\">" + esc(c.id) + "</div></td>" +
-      '<td><span class="mono">' + esc(c.schedule) + '</span><div class="cell-sub">' + esc(c.timezone) + "</div></td>" +
-      '<td><span class="mono">' + esc(c.skill) + '</span><div class="cell-sub">' + esc(c.delivery_channel) + "</div></td>" +
-      '<td><span class="mono">v' + esc(c.active_version?.id ?? "—") + "</span>" + (c.upcoming_version ? '<div class="cell-sub" style="color:var(--amber)">change scheduled</div>' : "") + "</td>" +
-      "<td>" + chip(c.state) + "</td>" +
-      "<td>" + (run ? chip(run.state) + '<div class="cell-sub">' + relTime(run.at) + "</div>" : '<span class="muted">none</span>') + "</td>" +
-      '<td class="right mono">' + c.run_count_7d + "</td></tr>";
+      '<td data-label="Commitment"><div class="cell-strong">' + esc(c.title) + "</div><div class=\"cell-sub mono\">" + esc(c.id) + "</div></td>" +
+      '<td data-label="Schedule"><span class="mono">' + esc(c.schedule) + '</span><div class="cell-sub">' + esc(c.timezone) + "</div></td>" +
+      '<td data-label="Skill / lane" class="col-skill"><span class="mono">' + esc(c.skill) + '</span><div class="cell-sub">' + esc(c.delivery_channel) + "</div></td>" +
+      '<td data-label="Instruction" class="col-instruction"><span class="mono">v' + esc(c.active_version?.id ?? "—") + "</span>" + (c.upcoming_version ? '<div class="cell-sub" style="color:var(--amber)">change scheduled</div>' : "") + "</td>" +
+      '<td data-label="State">' + chip(c.state) + "</td>" +
+      '<td data-label="Last run">' + (run ? chip(run.state) + '<div class="cell-sub">' + relTime(run.at) + "</div>" : '<span class="muted">none</span>') + "</td>" +
+      '<td data-label="Runs · 7d" class="right mono col-runs">' + c.run_count_7d + "</td></tr>";
   }).join("");
 
   $("#view").innerHTML =
     '<div class="page-head"><div><div class="kicker">Delegated work</div><h1 class="display">Commitments</h1>' +
-    '<p class="page-sub">A commitment is the central unit: a recurring piece of work with versioned instructions, evidence-gated runs and a delivery state that is never assumed.</p></div>' +
-    '<button class="btn btn-primary" data-act="new-commitment"><svg class="ico"><use href="#i-plus"/></svg>New commitment</button></div>' +
-    '<div class="alert-strip" style="background:var(--surface);border-color:var(--line);color:var(--ink-2)"><svg class="ico" style="color:var(--green)"><use href="#i-lock"/></svg>' +
+    '<p class="page-sub">A commitment is the central unit: a recurring piece of work with versioned instructions, evidence-gated runs and a delivery state that is never assumed.</p></div></div>' +
+    '<div class="alert-strip alert-info"><svg class="ico"><use href="#i-lock"/></svg>' +
     '<div><strong>Instruction truth is enforced in code.</strong> The scheduler resolves the latest approved version effective at run time; a change dated “tomorrow” cannot leak into today’s run.</div></div>' +
-    '<section class="panel"><div class="panel-head"><h3>All commitments</h3><span class="hint">' + list.length + " total</span></div><div class=\"table-wrap\"><table class=\"data\"><thead><tr><th>Commitment</th><th>Schedule</th><th>Skill / lane</th><th>Instruction</th><th>State</th><th>Last run</th><th class=\"right\">Runs · 7d</th></tr></thead><tbody>" +
+    '<section class="panel"><div class="panel-head"><h3>All commitments</h3><span class="hint">' + list.length + " total</span></div><div class=\"table-wrap\"><table class=\"data stackable\"><thead><tr><th>Commitment</th><th>Schedule</th><th>Skill / lane</th><th>Instruction</th><th>State</th><th>Last run</th><th class=\"right\">Runs · 7d</th></tr></thead><tbody>" +
     (rows || '<tr><td colspan="7" class="muted">No commitments yet.</td></tr>') + "</tbody></table></div></section>";
 }
 
@@ -833,7 +859,7 @@ async function renderCommitmentDetail(id) {
   const runsTable = runs.map((run) =>
     '<tr class="clickable" data-act="open-run" data-id="' + esc(run.id) + '">' +
     "<td>" + chip(run.state) + "</td>" +
-    '<td class="mono">' + fmtDateTime(run.at) + "</td>" +
+    '<td class="mono nowrap">' + fmtDateTime(run.at) + "</td>" +
     '<td class="mono">v' + run.instruction_version_id + "</td>" +
     "<td>" + (run.evidence?.length
       ? '<span class="tag">' + run.evidence.filter((e) => e.check_result === "passed").length + "/" + run.evidence.length + " passed</span>"
@@ -843,7 +869,7 @@ async function renderCommitmentDetail(id) {
 
   const versionsTable = versions.map((v) =>
     '<tr><td class="mono">v' + v.id + "</td><td>" + esc(v.content) + "</td>" +
-    '<td class="mono">' + fmtDateTime(v.effective_from) + "</td>" +
+    '<td class="mono nowrap">' + fmtDateTime(v.effective_from) + "</td>" +
     "<td>" + (v.is_future ? '<span class="chip chip-pending"><span class="dot"></span>scheduled</span>' : v.state === "approved" ? '<span class="chip chip-done"><span class="dot"></span>approved</span>' : chip(v.state)) + "</td>" +
     '<td class="mono">' + (v.supersedes_id ? "v" + v.supersedes_id : "—") + "</td></tr>").join("");
 
@@ -895,7 +921,7 @@ async function openRunDrawer(runId) {
       '<p class="small" style="margin:6px 0">' + esc(item.summary) + "</p>" +
       '<p class="mono tiny" style="color:var(--muted)">' + esc(item.check_detail) + "</p>" +
       (item.sha256 ? '<p class="hash">sha256 ' + esc(item.sha256) + "</p>" : "") +
-      (item.path ? '<p class="hash">' + esc(item.path) + "</p>" : "") + "</div>").join("");
+      (item.path ? '<p class="hash">' + esc(String(item.path).replace(/^.*?\/data\//, "")) + "</p>" : "") + "</div>").join("");
     $("#drawerBody").innerHTML =
       '<div class="row-wrap">' + chip(run.state) + "<span class=\"tag mono\">" + esc(run.id) + "</span></div>" +
       '<dl class="detail-grid" style="margin-top:14px"><dt>Commitment</dt><dd><a href="#/commitments/' + esc(data.commitment.id) + '">' + esc(data.commitment.title) + "</a></dd>" +
@@ -952,15 +978,16 @@ async function renderMemory() {
 }
 
 function diffHtml(proposal) {
-  const before = String(proposal.before || "").split("\n").map((l) => l.trim()).filter(Boolean);
-  const after = String(proposal.after || "").split("\n").map((l) => l.trim()).filter(Boolean);
+  const strip = (line) => line.trim().replace(/^[-*+]\s+/, "").replace(/^\d+\.\s+/, "");
+  const before = String(proposal.before || "").split("\n").map(strip).filter(Boolean);
+  const after = String(proposal.after || "").split("\n").map(strip).filter(Boolean);
   const beforeSet = new Set(before);
   const added = after.filter((l) => !beforeSet.has(l));
   const context = before.slice(-2);
   const cell = (line) => "<span>" + inline(esc(line)) + "</span>";
   const rows = context.map((l) => '<div class="diff-row ctx"><span class="diff-mark">·</span>' + cell(l) + "</div>").join("") +
     (added.length ? added.map((l) => '<div class="diff-row add"><span class="diff-mark">+</span>' + cell(l) + "</div>").join("") : '<div class="diff-row ctx"><span class="diff-mark">·</span><span>(no change)</span></div>');
-  return '<div class="diff">' + rows + "</div>";
+  return '<div class="diff"><div class="diff-head">Memory page preview · ' + (added.length || 0) + " line" + (added.length === 1 ? "" : "s") + " appended</div>" + rows + "</div>";
 }
 
 async function loadPage(force = false) {
@@ -1045,10 +1072,10 @@ async function loadAudit() {
     const rows = (state.audit.rows || []).filter((r) => state.audit.filter === "all" || r.decision === state.audit.filter);
     holder.innerHTML = '<div class="row-wrap" style="margin-bottom:12px">' + filters.map((f) =>
       '<button class="btn btn-sm ' + (state.audit.filter === f ? "btn-primary" : "") + '" data-act="audit-filter" data-filter="' + f + '">' + f.replace("_", " ") + "</button>").join("") + "</div>" +
-      '<section class="panel"><div class="panel-head"><h3>Decisions</h3><span class="hint">' + rows.length + " shown</span></div><div class=\"table-wrap\"><table class=\"data\"><thead><tr><th>When</th><th>Action</th><th>Target</th><th>Decision</th><th>Risk</th><th>Actor</th><th>Detail</th></tr></thead><tbody>" +
+      '<section class="panel"><div class="panel-head"><h3>Decisions</h3><span class="hint">' + rows.length + " shown</span></div><div class=\"table-wrap\"><table class=\"data\"><thead><tr><th>When</th><th>Action</th><th class=\"col-target\">Target</th><th>Decision</th><th class=\"col-risk\">Risk</th><th class=\"col-actor\">Actor</th><th>Detail</th></tr></thead><tbody>" +
       rows.map((r) =>
-        '<tr><td class="mono">' + fmtDateTime(r.at) + "</td><td class=\"mono\">" + esc(r.action) + "</td><td class=\"mono tiny\">" + esc(r.target || "—") + "</td><td>" + decisionChip(r.decision) + "</td><td>" + riskTag(r.risk) + "</td><td class=\"mono tiny\">" + esc(r.actor) + "</td><td>" +
-        (r.detail ? '<details class="json"><summary>view</summary><pre>' + esc(JSON.stringify(r.detail, null, 2)) + "</pre></details>" : '<span class="faint">—</span>') + "</td></tr>").join("") +
+        '<tr><td class="mono">' + fmtDateTime(r.at) + "</td><td class=\"mono\">" + esc(r.action) + '</td><td class="mono tiny col-target">' + esc(r.target || "—") + "</td><td>" + decisionChip(r.decision) + '</td><td class="col-risk">' + riskTag(r.risk) + '</td><td class="mono tiny col-actor">' + esc(r.actor) + "</td><td>" +
+        (r.detail ? '<details class="json"><summary><span>View</span><svg class="ico"><use href="#i-chevron"/></svg></summary><pre>' + esc(JSON.stringify(r.detail, null, 2)) + "</pre></details>" : '<span class="faint">—</span>') + "</td></tr>").join("") +
       "</tbody></table></div></section>";
   } catch (err) {
     holder.innerHTML = '<p class="error-text">' + esc(err.message) + "</p>";
@@ -1080,19 +1107,38 @@ function renderStatsBody(data) {
   const maxCost = Math.max(0.0001, ...purposes.map((p) => p.cost));
   const colors = { chat: "", fast: "amber", reasoning: "blue" };
   const bars = purposes.map((p) =>
-    '<div class="bar-row"><span class="mono tiny">' + esc(p.purpose) + '</span><div class="bar-track"><div class="bar-fill ' + (colors[p.purpose] || "") + '" style="width:' + Math.max(2, (p.cost / maxCost) * 100) + '%"></div></div><span class="bar-value">' + money(p.cost) + ' <span class="bar-calls">· ' + p.calls + " calls</span></span></div>").join("");
+    '<div class="bar-row"><span class="mono tiny">' + esc(p.purpose) + '</span><div class="bar-track"><div class="bar-fill ' + (colors[p.purpose] || "") + '" style="width:' + Math.max(2, (p.cost / maxCost) * 100) + '%"></div></div><span class="bar-value">' + money(p.cost) + "<small>" + p.calls + " calls</small></span></div>").join("");
 
   const days = buildDays(usage.by_day || [], state.stats.days);
-  const points = days.map((d, i) => [i, d.cost]).filter(() => true);
-  const max = Math.max(0.0001, ...days.map((d) => d.cost));
-  const w = 520;
-  const h = 120;
-  const step = days.length > 1 ? w / (days.length - 1) : w;
-  const path = points.map(([i, v], idx) => (idx === 0 ? "M" : "L") + (i * step).toFixed(1) + " " + (h - (v / max) * (h - 14) - 4).toFixed(1)).join(" ");
-  const area = path + " L " + w + " " + h + " L 0 " + h + " Z";
-  const grid = [0.25, 0.5, 0.75].map((g) => '<line class="gridline" x1="0" y1="' + h * g + '" x2="' + w + '" y2="' + h * g + '"/>').join("");
-  const axis = '<text class="axis" x="2" y="10" text-anchor="start">' + money(max) + "</text>";
-  const labels = days.map((d, i) => (i % Math.ceil(days.length / 6) === 0 ? '<text x="' + (i * step) + '" y="' + (h + 12) + '" text-anchor="middle">' + esc(d.label) + "</text>" : "")).join("");
+  const rawMax = Math.max(0.0001, ...days.map((d) => d.cost));
+  const max = niceCeil(rawMax);
+  const compact = window.innerWidth < 700;
+  const w = compact ? 360 : 720;
+  const h = compact ? 168 : 176;
+  const pad = { l: compact ? 40 : 46, r: compact ? 12 : 16, t: 12, b: 26 };
+  const iw = w - pad.l - pad.r;
+  const ih = h - pad.t - pad.b;
+  const xAt = (i) => pad.l + (days.length > 1 ? (i / (days.length - 1)) * iw : iw / 2);
+  const yAt = (v) => pad.t + ih - (v / max) * ih;
+  const path = days.map((d, i) => (i === 0 ? "M" : "L") + xAt(i).toFixed(1) + " " + yAt(d.cost).toFixed(1)).join(" ");
+  const area = path + " L " + xAt(days.length - 1).toFixed(1) + " " + (pad.t + ih) + " L " + pad.l + " " + (pad.t + ih) + " Z";
+  const ticks = [0, 0.5, 1].map((t) => {
+    const value = max * t;
+    const y = yAt(value);
+    return '<line class="gridline" x1="' + pad.l + '" y1="' + y + '" x2="' + (w - pad.r) + '" y2="' + y + '"/>' +
+      '<text x="' + (pad.l - 8) + '" y="' + (y + 3) + '" text-anchor="end">' + money(value) + "</text>";
+  }).join("");
+  const step = Math.max(1, Math.ceil(days.length / (compact ? 4 : 6)));
+  const labels = days.map((d, i) => {
+    if (i % step !== 0 && i !== days.length - 1) return "";
+    const anchor = i === 0 ? "start" : i === days.length - 1 ? "end" : "middle";
+    return '<text x="' + xAt(i) + '" y="' + (pad.t + ih + 16) + '" text-anchor="' + anchor + '">' + esc(d.label) + "</text>";
+  }).join("");
+  const last = days[days.length - 1];
+  const endpoint = '<circle class="endpoint" cx="' + xAt(days.length - 1) + '" cy="' + yAt(last.cost) + '" r="3"/>';
+  const chart =
+    '<svg class="chart" viewBox="0 0 ' + w + " " + h + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Daily inference cost over ' + state.stats.days + ' days">' +
+    ticks + '<path class="area" d="' + area + '"/><path class="line" d="' + path + '"/>' + endpoint + labels + "</svg>";
 
   const stateRows = Object.entries(runs.by_state || {}).map(([k, v]) =>
     '<div class="bar-row"><span class="mono tiny">' + esc(k) + '</span><div class="bar-track"><div class="bar-fill ' + (k === "done" ? "" : k === "failed" ? "red" : "amber") + '" style="width:' + Math.max(2, (v / Math.max(1, runs.total)) * 100) + '%"></div></div><span class="bar-value">' + v + "</span></div>").join("");
@@ -1101,14 +1147,14 @@ function renderStatsBody(data) {
     '<tr><td><div class="mono tiny model-id">' + esc(m.model) + '</div><div class="cell-sub">' + esc(m.provider) + "</div></td><td class=\"mono\">" + m.calls + "</td><td class=\"right mono\">" + money(m.cost) + "</td></tr>").join("");
 
   $("#statsBody").innerHTML =
-    '<div class="grid grid-4">' +
+    '<div class="stat-strip">' +
     kpi("Inference cost", money(usage.cost_usd), "", usage.calls + " calls · " + (usage.avg_latency_s || 0).toFixed(2) + "s avg", "accent-green") +
     kpi("Verified runs", pct(runs.success_rate), "", (runs.total || 0) + " runs · " + (runs.failed || 0) + " failed", runs.success_rate >= 0.8 ? "accent-green" : "accent-amber") +
     kpi("Delivery failures", String(runs.delivery_failed || 0), "", "surfaced without asking", runs.delivery_failed ? "accent-amber" : "accent-green") +
     kpi("Interventions", String((interventions.memory_decisions || 0) + (interventions.tool_approvals || 0) + (interventions.manual_runs || 0)), "", "decisions you had to make", "accent-amber") +
     "</div>" +
     '<div class="split" style="margin-top:20px"><div class="stack">' +
-    '<section class="panel"><div class="panel-head"><h3>Inference spend</h3><span class="hint">' + state.stats.days + ' days · stored per call</span></div><div class="panel-body"><svg class="chart" viewBox="0 0 ' + w + " " + (h + 18) + '" role="img" aria-label="Daily inference cost">' + grid + '<path class="area" d="' + area + '"/><path class="line" d="' + path + '"/>' + axis + labels + "</svg></div></section>" +
+    '<section class="panel"><div class="panel-head"><h3>Inference spend</h3><span class="hint">' + state.stats.days + ' days · stored per call</span></div><div class="panel-body">' + chart + "</div></section>" +
     '<section class="panel"><div class="panel-head"><h3>Cost by purpose</h3><span class="hint">routing is visible</span></div><div class="panel-body"><div class="bars">' + (bars || '<p class="muted small">No calls in this window.</p>') + '</div><div class="legend"><span><i style="background:var(--green)"></i>chat</span><span><i style="background:var(--amber)"></i>fast</span><span><i style="background:var(--blue)"></i>reasoning</span></div></div></section>' +
     "</div><aside class=\"stack\">" +
     '<section class="panel"><div class="panel-head"><h3>Reliability</h3><span class="hint">run states</span></div><div class="panel-body"><div class="bars">' + (stateRows || '<p class="muted small">No runs.</p>') + '</div><p class="helper" style="margin-top:10px">A run reaches “done” only after every evidence item passes its check.</p></div></section>' +
@@ -1117,8 +1163,15 @@ function renderStatsBody(data) {
     "</aside></div>";
 }
 
-function buildDays(byDay, count) {
-  const map = new Map(byDay.map((d) => [d.day, d]));
+function niceCeil(value) {
+  if (!value || value <= 0) return 0.01;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(value)));
+  const scaled = value / magnitude;
+  const step = scaled <= 1 ? 1 : scaled <= 2 ? 2 : scaled <= 5 ? 5 : 10;
+  return step * magnitude;
+}
+
+function buildDays(byDay, count) {  const map = new Map(byDay.map((d) => [d.day, d]));
   const out = [];
   const now = new Date();
   for (let i = count - 1; i >= 0; i -= 1) {
@@ -1242,6 +1295,7 @@ document.addEventListener("click", async (event) => {
   if (act === "session") { closeDrawer(); await openSession(id); return; }
   if (act === "new-chat") {
     closeDrawer();
+    state.chat.draft = true;
     state.chat.sessionId = null; state.chat.messages = []; state.chat.sources = []; state.chat.trace = [];
     await renderChat(); return;
   }
@@ -1423,6 +1477,8 @@ function openPalette() {
 }
 
 function closePalette() { $("#palette").hidden = true; }
+
+$("#paletteBtn").addEventListener("click", openPalette);
 
 $("#paletteInput").addEventListener("input", (event) => renderPalette(event.target.value));
 $("#paletteInput").addEventListener("keydown", (event) => {
