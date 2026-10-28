@@ -1,0 +1,26 @@
+# Optional TLS front door for a public demo.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d --build
+#
+# Point DEMO_DOMAIN at a hostname whose A record already resolves to this VM;
+# Caddy provisions the certificate automatically. Nothing else is exposed.
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: mitra-caddy
+    restart: unless-stopped
+    depends_on:
+      - mitra
+    environment:
+      DEMO_DOMAIN: ${DEMO_DOMAIN:?set DEMO_DOMAIN, e.g. demo.example.com}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  caddy-data:
+  caddy-config:

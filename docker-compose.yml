@@ -1,0 +1,42 @@
+# One-command local/VM deployment.
+#
+#   cp .env.example .env         # optional: NEBIUS_API_KEY, TAVILY_API_KEY, NTFY_TOPIC
+#   docker compose up -d --build
+#   open http://localhost:8080
+#
+# Without a Nebius key the app runs its deterministic local model and says so in
+# the UI. Set MITRA_DEMO_MODE=0 to run against your own (non-synthetic) data.
+
+services:
+  mitra:
+    build: .
+    image: mitra:latest
+    container_name: mitra
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MITRA_DATA_DIR: /data
+      MITRA_DEMO_MODE: ${MITRA_DEMO_MODE:-1}
+      MITRA_PROVIDER: ${MITRA_PROVIDER:-auto}
+      MITRA_TIMEZONE: ${MITRA_TIMEZONE:-Asia/Jakarta}
+      # Set a token before exposing this to the internet:
+      # MITRA_DASHBOARD_TOKEN: ${MITRA_DASHBOARD_TOKEN:-}
+    ports:
+      - "${MITRA_PORT:-8080}:8080"
+    volumes:
+      - mitra-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request as u; u.urlopen('http://127.0.0.1:8080/api/health', timeout=4).read()"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  mitra-data:

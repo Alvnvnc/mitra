@@ -1,0 +1,23 @@
+# Reverse proxy for the public demo. Caddy terminates TLS and forwards to the
+# app container; the app itself never binds a public interface.
+{$DEMO_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		Referrer-Policy "no-referrer"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+
+	# Health checks stay cheap and unbuffered.
+	reverse_proxy mitra:8080 {
+		health_uri /api/health
+		health_interval 30s
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

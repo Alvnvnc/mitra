@@ -28,3 +28,6 @@ build/
 .DS_Store
 .idea/
 .vscode/
+
+# Design references (third-party screenshots, not redistributed)
+.design/
