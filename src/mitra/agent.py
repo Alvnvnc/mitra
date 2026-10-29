@@ -30,6 +30,21 @@ from mitra.tools import ToolBox
 MAX_TOOL_ROUNDS = 4
 HISTORY_MESSAGES = 8
 
+# "Let me check…" with no tool call is a promise the loop can catch: live models
+# do it often, and the turn would otherwise end on a sentence that did nothing.
+_PROMISE = re.compile(
+    r"\b(let me|i'?ll|i will|i\u2019ll|saya akan|biar saya|mari saya)\b"
+    r"(?!\s+know)"
+    r"[^.!?\n]{0,60}?"
+    r"\b(check|look|read|fetch|search|open|verify|inspect|pull|cek|lihat|baca|cari|periksa)\b",
+    re.IGNORECASE,
+)
+
+
+def _promises_action(text: str) -> bool:
+    return bool(_PROMISE.search(text or ""))
+
+
 SYSTEM_TEMPLATE = """You are Mitra, a private, self-hosted personal AI that the user owns.
 You are calm, specific and brief. You never perform hidden actions.
 
@@ -48,6 +63,8 @@ HARD RULES
 5. Never reveal API keys, tokens, or file paths outside the workspace.
 6. Reply in the language the user writes in (Indonesian or English). Use short
    paragraphs or bullets. No filler openers.
+7. Never announce a tool call in prose ("let me check…"). Call the tool in the
+   same turn, or answer. The user sees the tool trace, not your intentions.
 
 LIVE STATE (authoritative, read from the ledger now)
 {state}
@@ -196,6 +213,7 @@ class ChatAgent:
         provider = self.router.provider
         model = self.router.model_for("chat") if provider == "nebius" else "mitra/local-demo"
         total_cost = 0.0
+        nudged = False
 
         for round_index in range(MAX_TOOL_ROUNDS):
             emit({"type": "stage", "stage": "model", "round": round_index + 1})
@@ -237,6 +255,28 @@ class ChatAgent:
 
             if not response.tool_calls:
                 final_text = response.content.strip()
+                # A reply that only promises to look something up is not an
+                # answer. Nudge once, then let the loop finish.
+                if final_text and not nudged and _promises_action(final_text):
+                    nudged = True
+                    messages.append({"role": "assistant", "content": final_text})
+                    messages.append(
+                        {
+                            "role": "system",
+                            "content": (
+                                "You announced an action but called no tool. Call the tool "
+                                "now, or answer from what you already have."
+                            ),
+                        }
+                    )
+                    trace.append(
+                        {
+                            "stage": "nudge",
+                            "label": "announced an action, called no tool — asked again",
+                        }
+                    )
+                    emit({"type": "stage", "stage": "nudge", "round": round_index + 1})
+                    continue
                 if not final_text:
                     final_text = (
                         "The model returned an empty answer. I would rather say that than "

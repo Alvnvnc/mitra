@@ -63,9 +63,19 @@ async def main() -> int:
         # chat interaction
         await page.goto(args.base + "/#/chat", wait_until="networkidle")
         await page.wait_for_timeout(800)
+        # A fresh conversation, so the shot shows one live turn rather than
+        # three asks stacked on top of the seeded thread.
+        await page.click('[data-act="new-chat"]')
+        await page.wait_for_timeout(400)
         await page.fill("#chatInput", "Did yesterday's brief actually deliver?")
         await page.click("#sendBtn")
-        await page.wait_for_timeout(6000)
+        # Live inference plus tool rounds take tens of seconds; wait for the
+        # turn to actually finish (composer re-enabled) instead of guessing.
+        await page.wait_for_function(
+            "() => { const b = document.querySelector('#sendBtn'); return b && !b.disabled; }",
+            timeout=180_000,
+        )
+        await page.wait_for_timeout(1200)
         await page.screenshot(path=str(out / "chat-reply.png"))
         print("captured chat-reply")
 

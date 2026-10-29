@@ -124,3 +124,32 @@ def test_exhausted_tool_budget_still_answers_from_what_the_tools_returned(tmp_pa
     # The closing call must not offer tools again, or it loops.
     assert agent.router.schemas[-1] == []
     assert ledger.messages(session)[0].content == reply.text
+
+
+def test_a_promise_to_look_something_up_is_not_accepted_as_the_answer(tmp_path):
+    """Live models say "let me check" and stop. Nudge once, then answer."""
+    from mitra.agent import _promises_action
+
+    assert _promises_action("Let me check the actual artifact.")
+    assert _promises_action("I'll look up yesterday's brief.")
+    assert not _promises_action("Let me know if you want the details.")
+    assert not _promises_action("Yes, it was delivered at 07:00.")
+
+    agent, _ledger, _ = _agent(
+        tmp_path,
+        [
+            LLMResponse(content="Let me check the artifact.", provider="nebius"),
+            LLMResponse(
+                content="",
+                tool_calls=[ToolCall(id="call_9", name="commitment_status", arguments={})],
+                provider="nebius",
+            ),
+            LLMResponse(content="It was delivered at 07:00.", provider="nebius"),
+        ],
+    )
+    session = agent.new_session("nudge")
+    reply = agent.reply(session, "Did yesterday's brief deliver?")
+
+    assert reply.text == "It was delivered at 07:00."
+    assert any(step["stage"] == "tool" for step in reply.trace)
+    assert any(step["stage"] == "nudge" for step in reply.trace)
