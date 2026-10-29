@@ -48,10 +48,14 @@ def main() -> int:
         end_clip = tmpdir / "end.mp4"
 
         # ---- body: title card + captions over the screen recording
-        inputs: list[str] = ["-i", str(raw)]
-        inputs += ["-loop", "1", "-i", str(title)]
+        # Every input needs its own -t: a looped still with no bound makes the
+        # overlay graph chew through frames until the output -t stops it, which
+        # turned a 3-minute encode into an hour.
+        span = str(args.seconds)
+        inputs: list[str] = ["-t", span, "-i", str(raw)]
+        inputs += ["-loop", "1", "-t", span, "-i", str(title)]
         for caption in captions:
-            inputs += ["-loop", "1", "-i", str(Path(caption["path"]))]
+            inputs += ["-loop", "1", "-t", span, "-i", str(Path(caption["path"]))]
 
         filters = ["[0:v]scale=1440:900,setsar=1,fps=25[base]"]
         current = "base"
@@ -84,7 +88,7 @@ def main() -> int:
                 "-c:v",
                 "libx264",
                 "-preset",
-                "slow",
+                "medium",
                 "-crf",
                 str(args.crf),
                 "-pix_fmt",
@@ -114,7 +118,7 @@ def main() -> int:
                 "-c:v",
                 "libx264",
                 "-preset",
-                "slow",
+                "medium",
                 "-crf",
                 str(args.crf),
                 "-pix_fmt",
