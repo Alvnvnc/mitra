@@ -121,6 +121,11 @@ async def record(page, shot, base: str) -> None:
     await page.fill("#chatInput", "Did yesterday's brief actually deliver?")
     await shot.wait_until(128)
     await page.click("#sendBtn")
+    # Live Nemotron takes a few seconds; wait for the answer rather than guess.
+    try:
+        await page.wait_for_selector(".msg-agent .agent-body p", timeout=45_000)
+    except Exception:  # noqa: BLE001 — keep the recording going
+        pass
     await shot.wait_until(145)
     if await page.locator(".trace summary").count():
         await page.locator(".trace summary").last.click()

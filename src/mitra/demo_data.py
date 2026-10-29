@@ -142,16 +142,21 @@ COMMITMENTS = [
 ]
 
 
-def _reply_meta(sources: list[str], *, provider: str = "demo") -> dict[str, object]:
-    """Metadata a seeded assistant turn would have written in a live turn."""
+def _reply_meta(sources: list[str], *, provider: str = "seed") -> dict[str, object]:
+    """Metadata for a seeded assistant turn.
+
+    Labelled ``seed``, never ``demo``: on a live instance these turns came from
+    the seed script, not from the model currently answering. The UI says
+    "seeded" so a reader can tell the two apart inside one thread.
+    """
     return {
         "provider": provider,
         "cost_usd": 0.0,
         "sources": sources,
         "trace": [
             {"stage": "retrieve", "label": f"{len(sources)} memory sources, ~135 tokens"},
-            {"stage": "model", "label": "mitra/local-demo · 752+186 tok"},
-            {"stage": "done", "label": "local demo model · $0.0000"},
+            {"stage": "model", "label": "seeded turn · written by the seed script"},
+            {"stage": "done", "label": "no live model call · $0.0000"},
         ],
     }
 

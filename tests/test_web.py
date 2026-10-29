@@ -9,6 +9,8 @@ from fastapi.testclient import TestClient
 
 from mitra.config import get_settings
 
+ADMIN = "test-admin-secret"
+
 
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
@@ -132,8 +134,9 @@ def test_demo_reset_reseeds_in_place(tmp_path, monkeypatch):
 
     app = create_app(data)
     app.state.runtime.settings.mitra_demo_mode = True
+    app.state.runtime.settings.mitra_admin_token = ADMIN
     client = TestClient(app)
-    response = client.post("/api/demo/reset", json={})
+    response = client.post("/api/demo/reset", json={}, headers={"x-mitra-admin": ADMIN})
     assert response.status_code == 200
     assert not marker.exists()
     body = response.json()
@@ -152,8 +155,11 @@ def test_chat_still_works_after_demo_reset(tmp_path):
 
     app = create_app(data)
     app.state.runtime.settings.mitra_demo_mode = True
+    app.state.runtime.settings.mitra_admin_token = ADMIN
     client = TestClient(app)
-    assert client.post("/api/demo/reset", json={}).status_code == 200
+    assert (
+        client.post("/api/demo/reset", json={}, headers={"x-mitra-admin": ADMIN}).status_code == 200
+    )
 
     session = client.post("/api/sessions", json={"title": "after reset"}).json()["session_id"]
     with client.stream(
@@ -166,3 +172,183 @@ def test_chat_still_works_after_demo_reset(tmp_path):
 
     assert '"type": "final"' in text
     assert "closed database" not in text.lower()
+
+
+# ------------------------------------------------------------ public hardening
+
+
+def test_chat_rate_limit_is_per_client(client):
+    """One visitor must not be able to hammer the endpoint that costs money."""
+    guard = client.app.state.guard
+    guard.chats_per_hour = 1
+    guard.chats_per_day = 1
+    guard.chat_cooldown_s = 0.0
+
+    session = client.post("/api/sessions", json={"title": "limits"}).json()["session_id"]
+    payload = {"session_id": session, "message": "hello"}
+    assert client.post("/api/chat/stream", json=payload).status_code == 200
+
+    blocked = client.post("/api/chat/stream", json=payload)
+    assert blocked.status_code == 429
+    assert blocked.json()["limited"] == "chat"
+    assert blocked.headers["retry-after"]
+
+
+def test_client_address_header_is_ignored_unless_trusted(client):
+    """Spoofing CF-Connecting-IP must not mint a fresh allowance per request."""
+    guard = client.app.state.guard
+    guard.chats_per_hour = 1
+    guard.chats_per_day = 1
+    guard.chat_cooldown_s = 0.0
+
+    session = client.post("/api/sessions", json={"title": "spoof"}).json()["session_id"]
+    payload = {"session_id": session, "message": "hello"}
+    assert (
+        client.post(
+            "/api/chat/stream", json=payload, headers={"cf-connecting-ip": "1.1.1.1"}
+        ).status_code
+        == 200
+    )
+    blocked = client.post("/api/chat/stream", json=payload, headers={"cf-connecting-ip": "2.2.2.2"})
+    assert blocked.status_code == 429
+
+
+def test_global_chat_ceiling_holds_across_clients(client):
+    """A crowd with many addresses still meets one ceiling, not one each."""
+    guard = client.app.state.guard
+    guard.chats_per_hour = 5
+    guard.chats_per_day = 5
+    guard.global_chats_per_day = 1
+    guard.chat_cooldown_s = 0.0
+
+    session = client.post("/api/sessions", json={"title": "global"}).json()["session_id"]
+    payload = {"session_id": session, "message": "hello"}
+    assert client.post("/api/chat/stream", json=payload).status_code == 200
+    for index in range(3):
+        client.app.state.runtime.settings.mitra_trust_proxy = True
+        blocked = client.post(
+            "/api/chat/stream",
+            json=payload,
+            headers={"cf-connecting-ip": f"203.0.113.{index}"},
+        )
+        assert blocked.status_code == 429
+
+
+def test_write_rate_limit_is_enforced(client):
+    guard = client.app.state.guard
+    guard.writes_per_minute = 1
+    assert client.post("/api/sessions", json={"title": "one"}).status_code == 200
+    blocked = client.post("/api/sessions", json={"title": "two"})
+    assert blocked.status_code == 429
+    assert blocked.json()["limited"] == "write"
+
+
+def test_api_key_never_appears_in_a_response(client):
+    """The key lives in the environment; no endpoint may echo it back."""
+    secret = "sk-do-not-leak-0123456789abcdef"
+    client.app.state.runtime.settings.nebius_api_key = secret
+
+    paths = [
+        "/api/health",
+        "/api/bootstrap",
+        "/api/audit?limit=20",
+        "/api/sessions",
+        "/api/export",
+        "/api/docs",
+        "/",
+    ]
+    for path in paths:
+        response = client.get(path)
+        assert secret not in response.text, path
+
+
+def test_docs_are_off_by_default(client):
+    assert client.get("/api/docs").status_code == 404
+
+
+def test_budget_ceiling_applies_to_skill_calls():
+    """`complete()` is used by scheduled skills; it must honour the same cap."""
+    import pytest as _pytest
+
+    from mitra.models.router import BudgetExceeded, ModelRouter
+
+    class Spend:
+        def usage_summary(self, days: int = 1) -> dict[str, float]:
+            return {"cost_usd": 0.02}
+
+    router = ModelRouter(
+        api_key="test-key", provider="nebius", ledger=Spend(), daily_budget_usd=0.01
+    )
+    assert router.budget_exceeded()
+    with _pytest.raises(BudgetExceeded):
+        router.complete(purpose="reasoning", messages=[{"role": "user", "content": "hi"}])
+
+
+def test_reset_requires_the_admin_token(tmp_path):
+    """A visitor must not be able to reset the ledger.
+
+    The daily spend counter is derived from the ledger, so an open reset would
+    also re-open the inference budget.
+    """
+    from mitra.demo_data import seed
+
+    data = tmp_path / "data"
+    seed(data)
+
+    from mitra.web.app import create_app
+
+    app = create_app(data)
+    app.state.runtime.settings.mitra_demo_mode = True
+    app.state.runtime.settings.mitra_admin_token = ADMIN
+    client = TestClient(app)
+
+    assert client.post("/api/demo/reset", json={}).status_code == 403
+    assert (
+        client.post("/api/demo/reset", json={}, headers={"x-mitra-admin": "wrong"}).status_code
+        == 403
+    )
+    assert (
+        client.post("/api/demo/reset", json={}, headers={"x-mitra-admin": ADMIN}).status_code == 200
+    )
+
+
+def test_admin_secret_is_traded_for_a_cookie_and_scrubbed(tmp_path):
+    from mitra.demo_data import seed
+
+    data = tmp_path / "data"
+    seed(data)
+
+    from mitra.web.app import create_app
+
+    app = create_app(data)
+    app.state.runtime.settings.mitra_demo_mode = True
+    app.state.runtime.settings.mitra_admin_token = ADMIN
+    client = TestClient(app)
+
+    response = client.get(f"/?admin={ADMIN}", follow_redirects=False)
+    assert response.status_code == 303
+    assert "admin" not in response.headers["location"]
+    assert response.cookies.get("mitra_admin") == ADMIN
+
+    # The cookie is Secure (the public site is HTTPS behind Cloudflare), so the
+    # plain-HTTP test client has to present it explicitly, as a browser would.
+    client.cookies.set("mitra_admin", ADMIN, domain="testserver.local")
+    assert client.get("/api/bootstrap").json()["app"]["is_admin"] is True
+    assert client.post("/api/demo/reset", json={}).status_code == 200
+
+
+def test_code_assets_are_not_cached_blindly(client):
+    """A CDN must revalidate the shell and its code, or the UI goes stale."""
+    for path in ("/", "/static/js/app.js", "/static/css/app.css"):
+        response = client.get(path)
+        assert response.status_code == 200, path
+        assert response.headers["cache-control"] == "no-cache", path
+    fonts = client.get("/static/fonts/fonts-local.css")
+    assert fonts.status_code == 200
+
+
+def test_shell_references_versioned_assets(client):
+    """A CDN must never be able to serve last deploy's JavaScript."""
+    html = client.get("/").text
+    assert "/static/js/app.js?v=" in html
+    assert "/static/css/app.css?v=" in html

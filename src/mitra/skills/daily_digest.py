@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from mitra.skills import SkillContext
+from mitra.skills import SkillContext, as_sections
 
 name = "daily_digest"
 
@@ -61,8 +61,10 @@ def gather_facts(repo_root: Path, *, since_hours: int, max_commits: int) -> dict
         "repo": str(repo_root),
         "since_hours": since_hours,
     }
+    # Named repo_scan, not error: a missing checkout says nothing about whether
+    # a commitment ran, and a model will happily report it as one if invited.
     if shutil.which("git") is None:
-        facts["error"] = "git not available"
+        facts["repo_scan"] = "unavailable: git is not installed in this image"
         return facts
 
     log = _git(
@@ -73,8 +75,12 @@ def gather_facts(repo_root: Path, *, since_hours: int, max_commits: int) -> dict
         "--date=format:%Y-%m-%d %H:%M",
         "--pretty=format:%h | %ad | %s",
     )
+    if log.startswith("__git_error__"):
+        facts["repo_scan"] = f"unavailable: {log.split(':', 1)[-1][:120]}"
+        return facts
     commits = [line for line in log.splitlines() if line and not line.startswith("__git_error__")]
     facts["commits"] = commits
+    facts["repo_scan"] = "ok"
 
     names = _git(
         repo_root,
@@ -106,7 +112,9 @@ def _build_messages(facts: dict[str, Any], max_words: int) -> list[dict[str, str
         "bullet yang diawali '- '; minimal 3 bullet — satu '- Selesai: ...', satu "
         "'- Tertunda: ...', dan satu '- Prioritas: ...' untuk 3 langkah berikutnya. "
         f"Maksimal {max_words} kata total. Hanya berdasarkan fakta yang diberikan — "
-        "jangan mengarang. Tanpa salam pembuka atau penutup."
+        "jangan mengarang. Tanpa salam pembuka atau penutup. Kalau repo_scan "
+        "mengatakan tidak tersedia, abaikan saja: itu soal checkout kode, bukan "
+        "soal commitment."
     )
     user = "Fakta aktivitas repo (JSON):\n" + json.dumps(facts, ensure_ascii=False, indent=1)
     return [
@@ -141,7 +149,7 @@ def execute(instruction: Any, context: SkillContext) -> DigestResult:
         # thinking keeps routine digests clean and cheap — verified 2026-10-03.
         extra_body={"chat_template_kwargs": {"enable_thinking": False}},
     )
-    summary = (completion.choices[0].message.content or "").strip()
+    summary = as_sections((completion.choices[0].message.content or "").strip())
     if not summary:
         raise RuntimeError("model returned an empty summary")
 

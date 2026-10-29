@@ -57,8 +57,30 @@ class Settings(BaseSettings):
     mitra_provider: str = "auto"
     mitra_demo_mode: bool = False
     mitra_dashboard_token: str = ""  # optional shared secret for a public demo
+    # Admin secret: required for destructive actions (demo reset). A visitor
+    # must never be able to reset the ledger, because the daily spend counter
+    # is derived from it.
+    mitra_admin_token: str = ""
     mitra_daily_budget_usd: float = 0.50
     mitra_timezone: str = "Asia/Jakarta"
+
+    # --- Public-instance protection ---
+    # Trust CF-Connecting-IP for the client address. Only enable behind the
+    # tunnel: the port must be bound to loopback, otherwise the header is
+    # attacker-controlled and every visitor could claim a fresh identity.
+    mitra_trust_proxy: bool = False
+    # Per-client chat allowance (a chat turn costs real money on a live key).
+    mitra_chat_per_hour: int = 8
+    mitra_chat_per_day: int = 30
+    # Ceiling across all clients, so a crowd (or a botnet with many addresses)
+    # cannot drain the key by splitting traffic.
+    mitra_global_chats_per_day: int = 60
+    mitra_chat_cooldown_s: float = 4.0
+    # Writes are cheap but mutating: keep one client from churning the ledger.
+    mitra_writes_per_minute: int = 20
+    mitra_global_writes_per_minute: int = 60
+    # Swagger/OpenAPI stays off unless explicitly enabled.
+    mitra_enable_docs: bool = False
 
     # --- Misc ---
     mitra_data_dir: Path = REPO_ROOT / "data"

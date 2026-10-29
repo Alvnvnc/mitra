@@ -14,6 +14,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# git is a runtime dependency of the digest skills (they scan the checkout);
+# without it a run reports "repo scan unavailable" instead of real activity.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 # Dependency layer first so source edits do not invalidate the install.
 COPY pyproject.toml README.md ./
 COPY src ./src

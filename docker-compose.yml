@@ -21,10 +21,13 @@ services:
       MITRA_DEMO_MODE: ${MITRA_DEMO_MODE:-1}
       MITRA_PROVIDER: ${MITRA_PROVIDER:-auto}
       MITRA_TIMEZONE: ${MITRA_TIMEZONE:-Asia/Jakarta}
+      MITRA_DAILY_BUDGET_USD: ${MITRA_DAILY_BUDGET_USD:-0.50}
       # Set a token before exposing this to the internet:
       # MITRA_DASHBOARD_TOKEN: ${MITRA_DASHBOARD_TOKEN:-}
     ports:
-      - "${MITRA_PORT:-8080}:8080"
+      # Loopback by default: put a tunnel or reverse proxy in front. Publishing
+      # 0.0.0.0:8080 would expose the dashboard (and its API key) directly.
+      - "${MITRA_BIND:-127.0.0.1}:${MITRA_PORT:-8080}:8080"
     volumes:
       - mitra-data:/data
     healthcheck:

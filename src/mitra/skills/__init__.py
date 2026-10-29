@@ -11,9 +11,53 @@ state + digest), ``commitment_followup`` (failed and undelivered runs) and
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
+
+# A section a skill's contract names explicitly. The evidence gate counts these,
+# so a missing section still fails regardless of how the model formatted it.
+SECTION_LABELS = (
+    "status",
+    "selesai",
+    "tertunda",
+    "prioritas",
+    "priorities",
+    "pending",
+    "done",
+    "blocked",
+)
+
+_MARKER = re.compile(r"^\s*(?:[-•*]|\d+[.)])\s+")
+_LABEL = re.compile(
+    r"^\s*(?:\*\*)?(?:" + "|".join(SECTION_LABELS) + r")\b",
+    re.IGNORECASE,
+)
+_FENCE = re.compile(r"^```.*$", re.MULTILINE)
+
+
+def as_sections(text: str) -> str:
+    """Normalise a model's prose into the bullet shape the gate counts.
+
+    Live models drift between ``- Status: …`` and ``Status: …``. The gate is
+    about structure — which sections exist and how long the text is — not about
+    a leading dash, so only *labelled* lines get a marker. Unlabelled prose is
+    left alone, which means a model that skips a section still fails: the gate
+    counts real sections, not line breaks.
+    """
+    lines = _FENCE.sub("", text or "").splitlines()
+    out: list[str] = []
+    for raw in lines:
+        line = raw.rstrip()
+        if not line.strip():
+            continue
+        body = _MARKER.sub("", line)
+        if _LABEL.match(body):
+            out.append("- " + body.strip())
+        else:
+            out.append(line)
+    return "\n".join(out)
 
 
 @dataclass

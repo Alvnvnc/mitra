@@ -16,6 +16,7 @@ personal system the owner can read, copy and run.
 
 from __future__ import annotations
 
+import hmac
 import json
 import queue
 import threading
@@ -24,10 +25,17 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from fastapi import Body, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 
 from mitra import __version__
@@ -377,25 +385,88 @@ def _env_flag(name: str, *, default: bool = False) -> bool:
 
 
 class DemoGuard:
-    """Tiny in-memory limiter for the public demo. Single-user scale by design."""
+    """Layered in-memory limiter for a public demo that spends a real API key.
 
-    def __init__(self, *, chats_per_hour: int = 40, writes_per_minute: int = 30) -> None:
+    Three layers, because each one alone is easy to defeat:
+
+    * per-client cooldown — stops a loop hammering chat from one address;
+    * per-client windows — one visitor cannot consume the whole allowance;
+    * global windows — a crowd, or a botnet cycling through addresses, still
+      meets a ceiling that does not depend on how many identities it can mint.
+
+    Single-process and in-memory by design: this is a demo, not a billing
+    system. The hard money ceiling is ``MITRA_DAILY_BUDGET_USD`` in the router;
+    these limits exist so the budget is spent on visitors rather than on one
+    script.
+    """
+
+    def __init__(
+        self,
+        *,
+        chats_per_hour: int = 8,
+        chats_per_day: int = 30,
+        global_chats_per_day: int = 60,
+        chat_cooldown_s: float = 4.0,
+        writes_per_minute: int = 20,
+        global_writes_per_minute: int = 60,
+    ) -> None:
         self.chats_per_hour = chats_per_hour
+        self.chats_per_day = chats_per_day
+        self.global_chats_per_day = global_chats_per_day
+        self.chat_cooldown_s = chat_cooldown_s
         self.writes_per_minute = writes_per_minute
+        self.global_writes_per_minute = global_writes_per_minute
         self._chats: dict[str, list[float]] = defaultdict(list)
         self._writes: dict[str, list[float]] = defaultdict(list)
+        self._global_chats: list[float] = []
+        self._global_writes: list[float] = []
+        self._last_chat: dict[str, float] = {}
+
+    @staticmethod
+    def _trim(bucket: list[float], now: float, window: float) -> None:
+        cutoff = now - window
+        bucket[:] = [stamp for stamp in bucket if stamp > cutoff]
+
+    def retry_after(self, key: str, kind: str) -> float:
+        """Seconds until this client is allowed again (0 when allowed now)."""
+        now = time.time()
+        if kind != "chat":
+            return 0.0
+        last = self._last_chat.get(key)
+        if last is None:
+            return 0.0
+        return max(0.0, self.chat_cooldown_s - (now - last))
 
     def allow(self, key: str, kind: str) -> bool:
         now = time.time()
         if kind == "chat":
-            bucket, window, cap = self._chats[key], 3600, self.chats_per_hour
-        else:
-            bucket, window, cap = self._writes[key], 60, self.writes_per_minute
-        cutoff = now - window
-        bucket[:] = [stamp for stamp in bucket if stamp > cutoff]
-        if len(bucket) >= cap:
+            self._trim(self._global_chats, now, 86400)
+            if len(self._global_chats) >= self.global_chats_per_day:
+                return False
+            last = self._last_chat.get(key)
+            if last is not None and now - last < self.chat_cooldown_s:
+                return False
+            bucket = self._chats[key]
+            self._trim(bucket, now, 86400)
+            if len(bucket) >= self.chats_per_day:
+                return False
+            self._trim(bucket, now, 3600)
+            if len(bucket) >= self.chats_per_hour:
+                return False
+            bucket.append(now)
+            self._last_chat[key] = now
+            self._global_chats.append(now)
+            return True
+
+        self._trim(self._global_writes, now, 60)
+        if len(self._global_writes) >= self.global_writes_per_minute:
+            return False
+        bucket = self._writes[key]
+        self._trim(bucket, now, 60)
+        if len(bucket) >= self.writes_per_minute:
             return False
         bucket.append(now)
+        self._global_writes.append(now)
         return True
 
 
@@ -406,9 +477,18 @@ def create_app(
     data_dir: str | Path | None = None, *, start_scheduler: bool | None = None
 ) -> FastAPI:
     runtime = Runtime(data_dir)
-    guard = DemoGuard()
+    settings = runtime.settings
+    guard = DemoGuard(
+        chats_per_hour=settings.mitra_chat_per_hour,
+        chats_per_day=settings.mitra_chat_per_day,
+        global_chats_per_day=settings.mitra_global_chats_per_day,
+        chat_cooldown_s=settings.mitra_chat_cooldown_s,
+        writes_per_minute=settings.mitra_writes_per_minute,
+        global_writes_per_minute=settings.mitra_global_writes_per_minute,
+    )
+    docs_url = "/api/docs" if settings.mitra_enable_docs else None
 
-    app = FastAPI(title="Mitra", version=__version__, docs_url="/api/docs", redoc_url=None)
+    app = FastAPI(title="Mitra", version=__version__, docs_url=docs_url, redoc_url=None)
     app.state.runtime = runtime
     app.state.guard = guard
 
@@ -421,6 +501,27 @@ def create_app(
 
     @app.middleware("http")
     async def security_middleware(request: Request, call_next):
+        # ?admin=<secret> trades the secret in the URL for an HttpOnly cookie and
+        # immediately redirects, so it never ends up in a bookmark or referrer.
+        admin_token = (runtime.settings.mitra_admin_token or "").strip()
+        if admin_token and request.query_params.get("admin") is not None:
+            supplied = (request.query_params.get("admin") or "").strip()
+            if hmac.compare_digest(supplied, admin_token):
+                clean = request.url.path
+                rest = {k: v for k, v in request.query_params.items() if k != "admin"}
+                if rest:
+                    clean += "?" + urlencode(rest)
+                response = RedirectResponse(clean, status_code=303)
+                response.set_cookie(
+                    "mitra_admin",
+                    admin_token,
+                    httponly=True,
+                    samesite="strict",
+                    secure=True,
+                    max_age=7 * 86400,
+                )
+                return response
+
         token = (runtime.settings.mitra_dashboard_token or "").strip()
         if token:
             supplied = (
@@ -448,13 +549,58 @@ def create_app(
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
         response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+        response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=()")
+        if request.url.path.startswith("/api/"):
+            response.headers.setdefault("Cache-Control", "no-store")
+        elif request.url.path == "/" or request.url.path.startswith(
+            ("/static/js/", "/static/css/")
+        ):
+            # The shell and its code must revalidate on every load. A CDN that
+            # caches them per content-encoding will happily serve last deploy's
+            # JavaScript otherwise, and the UI silently stops matching the API.
+            response.headers["Cache-Control"] = "no-cache"
+        elif request.url.path.startswith("/static/fonts/"):
+            # Fonts are content-addressed by name and never change.
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        # Cloudflare injects its RUM beacon into proxied HTML. It is the one
+        # third-party script allowed; drop this host if you disable RUM in the
+        # Cloudflare dashboard. Everything else stays first-party.
         response.headers.setdefault(
             "Content-Security-Policy",
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; "
+            "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; "
+            "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; "
+            "connect-src 'self' https://cloudflareinsights.com; base-uri 'none'; "
             "form-action 'self'; frame-ancestors 'none'",
         )
         return response
+
+    def is_admin(request: Request) -> bool:
+        """Does this request carry the admin secret?
+
+        Admin rights are granted by a cookie (set when the page is opened with
+        ``?admin=…``) or by the ``x-mitra-admin`` header, so the secret never
+        sits in a bookmarked URL.
+        """
+        token = (runtime.settings.mitra_admin_token or "").strip()
+        if not token:
+            return False
+        supplied = request.cookies.get("mitra_admin") or request.headers.get("x-mitra-admin") or ""
+        return hmac.compare_digest(supplied.strip(), token)
+
+    def client_ip(request: Request) -> str:
+        """The address to meter.
+
+        Behind Cloudflare the socket peer is the tunnel, so every visitor would
+        share one bucket. CF-Connecting-IP is only believed when the operator
+        declares the port is loopback-bound (``MITRA_TRUST_PROXY=1``); with a
+        public port the header is attacker-controlled and must be ignored.
+        """
+        if runtime.settings.mitra_trust_proxy:
+            forwarded = (request.headers.get("cf-connecting-ip") or "").strip()
+            if forwarded:
+                return forwarded
+        return request.client.host if request.client else "anonymous"
 
     @app.middleware("http")
     async def limit_middleware(request: Request, call_next):
@@ -462,21 +608,53 @@ def create_app(
             length = int(request.headers.get("content-length") or 0)
             if length > 200_000:
                 return JSONResponse({"error": "payload too large"}, status_code=413)
-            if runtime.settings.mitra_demo_mode:
-                key = request.client.host if request.client else "anonymous"
-                kind = "chat" if request.url.path == "/api/chat/stream" else "write"
-                if not guard.allow(key, kind):
-                    return JSONResponse(
-                        {"error": "demo rate limit reached — try again later"},
-                        status_code=429,
+            key = client_ip(request)
+            kind = "chat" if request.url.path == "/api/chat/stream" else "write"
+            if not guard.allow(key, kind):
+                wait = guard.retry_after(key, kind)
+                if kind == "chat":
+                    detail = (
+                        "This shared demo limits chat turns so the API key cannot be "
+                        "spent by one visitor. Try again in a few seconds, or use the "
+                        "seeded conversations and the rest of the dashboard."
                     )
+                else:
+                    detail = "Too many actions from this address — wait a minute and retry."
+                return JSONResponse(
+                    {
+                        "error": detail,
+                        "retry_after_s": round(wait, 1),
+                        "limited": kind,
+                    },
+                    status_code=429,
+                    headers={"Retry-After": str(max(1, int(wait)))},
+                )
         return await call_next(request)
 
     # ----------------------------------------------------------------- routes
 
+    def asset_version(rel: str) -> str:
+        """Cache-buster from the file itself, so a deploy cannot be masked by a CDN.
+
+        Cloudflare caches per content-encoding, and a stale brotli variant of
+        app.js once shipped an old UI against a new API. The query string is
+        derived from mtime+size, so the URL changes exactly when the file does.
+        """
+        try:
+            stat = (STATIC_DIR / rel).stat()
+        except OSError:  # pragma: no cover - file is part of the image
+            return "0"
+        return f"{int(stat.st_mtime)}-{stat.st_size}"
+
     @app.get("/", include_in_schema=False)
-    def index() -> FileResponse:
-        return FileResponse(STATIC_DIR / "index.html")
+    def index() -> HTMLResponse:
+        html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        for rel in ("css/app.css", "js/app.js"):
+            html = html.replace(
+                f"/static/{rel}",
+                f"/static/{rel}?v={asset_version(rel)}",
+            )
+        return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
     @app.get("/favicon.svg", include_in_schema=False)
     def favicon() -> FileResponse:
@@ -496,8 +674,10 @@ def create_app(
         return JSONResponse({"ok": True})
 
     @app.get("/api/bootstrap")
-    def bootstrap() -> dict[str, Any]:
-        return runtime.bootstrap()
+    def bootstrap(request: Request) -> dict[str, Any]:
+        payload = runtime.bootstrap()
+        payload["app"]["is_admin"] = is_admin(request)
+        return payload
 
     @app.get("/api/commitments/{commitment_id}")
     def commitment_detail(commitment_id: str) -> dict[str, Any]:
@@ -827,9 +1007,11 @@ def create_app(
         )
 
     @app.post("/api/demo/reset")
-    def demo_reset(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    def demo_reset(request: Request, payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
         if not runtime.settings.mitra_demo_mode:
             raise HTTPException(403, "reset is only available with MITRA_DEMO_MODE=1")
+        if not is_admin(request):
+            raise HTTPException(403, "admin token required")
         runtime.reset_demo()
         return runtime.bootstrap()
 

@@ -1,9 +1,8 @@
 # Devpost submission — copy, links, and the walkthrough video
 
-Everything below is ready to paste. Replace `DEMO_URL` and `REPO_URL` once the
-demo is deployed.
+Everything below is ready to paste.
 
-- **Demo:** <https://ip-172-26-13-244.tail40f715.ts.net:10000/> (synthetic instance, resettable)
+- **Demo:** <https://mitra.pavernor.tech> — seeded synthetic history, **live Nemotron inference** through Nebius Token Factory
 - **Repository:** https://github.com/Alvnvnc/mitra
 - **Track:** Personal AI
 - **Video:** 3:06 (title card + captioned walkthrough + end card), structure below
@@ -97,16 +96,18 @@ easy to get wrong. Instructions became append-only rows with `effective_from`,
 and the scheduler resolves the version against the *run* timestamp, not the
 current wall clock.
 
-**Honest fallback.** Our Nebius API key returned `401 Unauthenticated` for the
-whole build (verified directly against `/v1/models` on both documented base
-URLs). We refused to fake live inference, so the app ships a deterministic local
-composer that reads the *real* ledger and labels itself "Local demo model · no
-API key" on every surface. The live path is implemented and tested with a stub;
-`scripts/smoke_test.py` is the first command to run with a valid key.
+**Inference that says what it is.** The submitted instance runs live:
+`/api/health` reports `provider: nebius`, chat turns hit
+`nvidia/nemotron-3-super-120b-a12b`, and planning runs `Nemotron-3-Ultra`. The
+first key we were issued returned `401` for most of the build, so the router was
+built to *fail visibly* — it probes at startup, flips to a deterministic local
+composer that reads the real ledger, and labels every surface "Local demo model".
+That path stays in the image, and it is what runs if the key dies mid-demo:
+a degraded demo, never a lying one.
 
 ## Accomplishments we're proud of
 
-- Three invariants that hold under tests, not just under demo conditions — 44
+- Three invariants that hold under tests, not just under demo conditions — 63
   tests, including "a change effective tomorrow does not apply today",
   "completion without evidence raises", and "a delivery failure leaves the
   verified artifact intact".
@@ -141,8 +142,8 @@ API key" on every surface. The live path is implemented and tested with a stub;
 ## Built with
 
 `python` · `fastapi` · `sqlite` · `pydantic` · `uvicorn` · `openai` · `httpx` ·
-`nvidia-nemotron` · `nebius-token-factory` · `tavily` · `ntfy` · `docker` ·
-`caddy` · `vanilla-js` · `css`
+`nvidia-nemotron` · `nebius-token-factory` · `cloudflare-tunnel` · `tavily` · `ntfy` ·
+`docker` · `vanilla-js` · `css`
 
 ---
 
@@ -162,12 +163,12 @@ narrate the UI, narrate the *guarantee*.
 | Time | On screen | Say |
 |---|---|---|
 | 0:00–0:02 | Title card | "Mitra: delegated work, verified." |
-| 0:02–0:13 | Today view, hero + "4 things need you" | "This is Mitra. It runs recurring work for me and it proves what happened. Right now four things need a human decision — and it says so without me asking." |
+| 0:02–0:13 | Today view, hero + "4 things need you" | "This is Mitra. It runs recurring work for me and it proves what happened. Right now four things need a human decision — and it says so without me asking. The history is seeded; the inference underneath is live Nemotron." |
 | 0:13–0:31 | Scroll to needs-you, click **View notice** | "This commitment ran, passed its evidence check, produced a verified artifact — and then delivery failed. Mitra records `delivery_failed`, writes a notice, and keeps the result. Delivery is a separate stage from execution, by design." |
 | 0:31–0:46 | Commitments → open *Morning research brief* | "Every commitment is one unit of delegated work: a schedule, a skill, and exactly one instruction version in force." |
 | 0:46–1:28 | Runs table, evidence counts, instruction history | "Every run carries evidence. Two checks: the artifact exists, and it has the required sections. Green means both passed. The red row is real — the skill demanded three bullets, the artifact had two, and the gate refused to call it done. And instructions are versions: v3 becomes effective tomorrow. Tomorrow's run picks it up; today's cannot. That is enforced in the scheduler, not in a prompt." |
 | 1:28–1:57 | Memory view → reject a proposal | "Chat cannot write memory. Consolidation proposes a change, with the diff and the source message ids. If I reject, the page stays byte-identical. Approving appends one bullet. The model never decides what it remembers." |
-| 1:57–2:32 | Chat → new conversation → "Did yesterday's brief actually deliver?" → expand the trace | "Chat reads the real ledger, retrieves the memory pages it used, calls tools through the policy layer, and shows the sources, the trace and the cost of the turn. Note the label: this instance runs the local fallback model because our Token Factory key was rejected — the live path is Nemotron 3 on Nebius." |
+| 1:57–2:32 | Chat → new conversation → "Did yesterday's brief actually deliver?" → expand the trace | "Chat reads the real ledger, retrieves the memory pages it used, calls tools through the policy layer, and shows the sources, the trace and the cost of the turn. Note the labels: `nemotron`, the model id, and six hundredths of a cent — that number is a row in the ledger, not an estimate. This is live Nemotron on Nebius." |
 | 2:32–2:46 | Audit → filter **denied** | "Every decision is here, including the refused ones. `web_fetch` was denied for a private address; `run_shell` for not being on the allowlist; a memory write because chat is read-only. A security claim you can't audit isn't a security claim." |
 | 2:46–3:02 | Stats view | "Cost, reliability, interventions, and calls by model — measured per call, not estimated. This is what 'always-on and trustworthy' has to look like: a ledger you can read, and a system that tells on itself." |
 | 3:02–3:06 | End card | — |
@@ -183,30 +184,48 @@ own. It is a partner that keeps its promises in writing."
 with the delivery-failure banner visible. No text overlay needed; the type is the
 design. The video title card (`.design/video/title.png`) works as a fallback.
 
-## Swapping in a live Nebius key (before the deadline)
+## How the public instance is protected
 
-The demo instance currently reports `provider: demo`. To run it on Nemotron:
+A judged demo has to be clickable by strangers, and a clickable demo holds an API
+key. The instance runs on a VPS behind an existing Cloudflare Tunnel, published
+on `127.0.0.1:8099` only — the port refuses external connections, so the tunnel
+is the single ingress and `CF-Connecting-IP` can be trusted to meter real
+visitors.
+
+| Control | Value |
+|---|---|
+| Chat per visitor | 4 s cooldown, 6/hour, 20/day |
+| Chat across all visitors | 40/day |
+| Writes | 15/min per visitor, 40/min globally |
+| Hard spend ceiling | `MITRA_DAILY_BUDGET_USD=0.30`, checked before every model call, scheduled skill runs included |
+| Admin actions | `/api/demo/reset` needs `MITRA_ADMIN_TOKEN`; the UI hides it unless you open `/?admin=…` (HttpOnly cookie, query string scrubbed) |
+| Key exposure | only in `.env` (mode 600) and the process env; a test walks the API and asserts the key never appears in a response |
+| Surface | `/api/docs` off, 200 kB payload cap, 6 000 char chat cap, CSP + `nosniff` + `DENY` framing |
+
+Full wiring, rotation steps and a post-deploy checklist: [DEPLOY.md](DEPLOY.md).
+
+## Swapping in a live Nebius key
 
 ```bash
-# on the host that serves the demo
-cd mitra
-printf 'NEBIUS_API_KEY=%s\n' "$KEY" >> .env
-sudo docker compose -p mitra up -d            # recreate with the new env
-curl -s localhost:8080/api/health             # expect "provider":"nebius"
-.venv/bin/python scripts/smoke_test.py --all   # optional: per-tier latency check
+ssh vps-alvn
+cd ~/mitra
+sed -i 's/^NEBIUS_API_KEY=.*/NEBIUS_API_KEY=NEW_KEY/' .env   # mode stays 600
+docker compose -p mitra up -d                                # recreate, not rebuild
+curl -s http://127.0.0.1:8099/api/health                     # "provider":"nebius"
 ```
 
-The router probes the key at startup. When it authenticates, the sidebar model
-card switches from "Local demo model" to "Nemotron · Nebius", replies are
-labelled `nemotron` with real per-call cost, and the Stats view starts counting
-actual spend. Nothing else changes — same ledger, same gate, same policy. The
-synthetic-data banner stays, because the seeded commitments are still synthetic.
+The router probes the key at startup. If it authenticates, the sidebar card reads
+"Nemotron · Nebius · live inference", replies are labelled `nemotron` with real
+per-call cost, and the Stats view counts actual spend. If it does not, the card
+says "Local demo model" and the reason — the site stays up. The synthetic-data
+banner stays either way, because the seeded commitments are still synthetic.
 
 ## Submission checklist
 
-- [x] Demo live and reachable without a token (Tailscale Funnel, HTTPS)
-- [ ] Video uploaded (YouTube/Vimeo, public or unlisted)
+- [x] Demo live on a real domain over HTTPS, no token needed to click through: <https://mitra.pavernor.tech>
+- [x] `provider: nebius` confirmed in `/api/health` with a real key
+- [x] Rate limits, spend ceiling and the admin gate exercised against the public URL
+- [ ] Video uploaded (YouTube/Vimeo, public or unlisted) — `docs/media/demo-walkthrough.mp4`
 - [ ] Repository public, README first screen has a screenshot and the one-command run
 - [ ] `docs/FEEDBACK.md` linked in the submission (feedback bonus)
-- [ ] Built-with tags include: `nvidia`, `nemotron`, `nebius`, `tavily`, `fastapi`, `sqlite`
-- [ ] Nebius key replaced and `provider: nebius` confirmed in `/api/health` before the deadline
+- [ ] Built-with tags include: `nvidia`, `nemotron`, `nebius`, `cloudflare`, `fastapi`, `sqlite`

@@ -156,6 +156,14 @@ function md(src) {
   return out.join("\n");
 }
 
+function providerLabel(provider) {
+  if (!provider) return "model";
+  if (provider === "seed") return "seeded";
+  if (provider === "demo") return "local demo model";
+  if (provider === "nebius") return "nemotron";
+  return provider;
+}
+
 function chip(runState) {
   const map = {
     done: ["chip-done", "Verified"],
@@ -281,7 +289,7 @@ function updateShell() {
   $("#providerDot").className = "dot " + (live ? "" : "amber");
   $("#providerState").textContent = live ? "live inference" : "demo fallback";
   $("#demoBanner").hidden = !state.boot.app.demo_mode;
-  $("#resetDemo").hidden = !state.boot.app.demo_mode;
+  $("#resetDemo").hidden = !(state.boot.app.demo_mode && state.boot.app.is_admin);
   syncBannerHeight();
 }
 
@@ -493,7 +501,7 @@ function summarizeEvent(event) {
   }
   if (event.kind === "memory_applied") return "memory updated: " + (detail.page ?? "");
   if (event.kind === "memory_user_edit") return "you edited " + (detail.page ?? "");
-  if (event.kind === "chat_reply") return "reply via " + (detail.provider === "demo" ? "local demo model" : detail.provider || "model");
+  if (event.kind === "chat_reply") return "reply via " + providerLabel(detail.provider);
   if (event.kind === "web_search") return "“" + (detail.query || "").slice(0, 60) + "”";
   if (event.kind === "consolidation_run") return (detail.created?.length ?? detail.created ?? 0) + " proposal(s) from a " + (detail.window ?? "24h") + " window";
   if (event.kind === "instruction_added") return "v" + (detail.version_id ?? "") + " in force from " + fmtDate(detail.effective_from);
@@ -615,7 +623,7 @@ function messageMarkup(message) {
   const isError = meta.error;
   return (
     '<div class="msg msg-agent ' + (isError ? "msg-error" : "") + '"><div class="avatar">M</div><div>' +
-    '<div class="agent-name"><b>Mitra</b>' + (meta.provider ? '<span>' + esc(meta.provider === "demo" ? "local demo" : "nemotron") + "</span>" : "") +
+    '<div class="agent-name"><b>Mitra</b>' + (meta.provider ? '<span>' + esc(providerLabel(meta.provider)) + "</span>" : "") +
     (meta.cost_usd !== undefined ? '<span>· ' + money(meta.cost_usd) + "</span>" : "") +
     '<span>· ' + (message.at ? fmtTime(message.at) : "now") + "</span></div>" +
     '<div class="agent-body md">' + md(message.content) + "</div>" +
@@ -692,7 +700,11 @@ async function sendChat(textOverride) {
     });
     if (!res.ok || !res.body) {
       let detail = "HTTP " + res.status;
-      try { detail = (await res.json()).detail || detail; } catch (_) {}
+      try {
+        const body = await res.json();
+        detail = body.detail || body.error || detail;
+        if (body.retry_after_s) detail += " (retry in " + Math.max(1, Math.round(body.retry_after_s)) + "s)";
+      } catch (_) {}
       throw new Error(detail);
     }
     const reader = res.body.getReader();

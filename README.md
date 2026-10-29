@@ -5,7 +5,7 @@
 Built for the [NVIDIA × Nebius Global AI Hackathon](https://nebiusglobalaihackathon.devpost.com/) — **Personal AI Track**.
 Inference runs on **NVIDIA Nemotron** models served by **Nebius Token Factory**; everything else — memory, scheduler, policy, evidence gate, dashboard — is this repository, MIT licensed, running on one VM you control.
 
-**Live demo:** <https://ip-172-26-13-244.tail40f715.ts.net:10000/> — a seeded synthetic instance you can click through (and reset).
+**Live demo:** <https://mitra.pavernor.tech> — seeded synthetic history, live Nemotron inference, click through it.
 
 ![Today view](docs/media/today.png)
 
@@ -52,7 +52,8 @@ src/mitra/
 docker/              Dockerfile entrypoint + Caddyfile for a TLS front door.
 scripts/             serve.py, seed_demo.py, capture_screens.py, record_demo.py,
                      smoke_test.py, demo_vertical_slice.py, run_scheduler.py, ntfy_ping.py.
-tests/               46 tests: ledger invariants, policy, agent, consolidation, HTTP surface.
+tests/               63 tests: ledger invariants, policy, agent, consolidation, skills,
+                     rate limits, secret handling, HTTP surface.
 docs/                architecture, problem statement, validation plan, media, feedback.
 ```
 
@@ -80,12 +81,30 @@ cp .env.example .env
 MITRA_DATA_DIR=data/demo MITRA_DEMO_MODE=1 \
   .venv/bin/python scripts/serve.py --port 8080         # dashboard
 .venv/bin/python scripts/run_scheduler.py --once       # one scheduler tick against real skills
-.venv/bin/python -m pytest -q                          # 46 tests
+.venv/bin/python -m pytest -q                          # 63 tests
 ```
 
-### Public demo hardening
+### Deploying it publicly
 
-Set `MITRA_DASHBOARD_TOKEN` to require `?token=…` (cookie is then set for the session). `MITRA_DEMO_MODE=1` turns on the synthetic-data banner, the demo guard (rate limiting) and the reset button. Add `-f docker-compose.tls.yml` with `DEMO_DOMAIN` to terminate TLS in front of the app.
+`docker-compose.yml` publishes the app on `127.0.0.1` only — put a tunnel or a
+reverse proxy in front and never publish `0.0.0.0:8080`. The live instance runs
+behind Cloudflare Tunnel at <https://mitra.pavernor.tech>, with the exact wiring
+in [docs/DEPLOY.md](docs/DEPLOY.md).
+
+```bash
+# .env on the server (mode 600)
+NEBIUS_API_KEY=…            # the only real secret
+MITRA_PROVIDER=auto         # Nebius, else the labelled local model
+MITRA_DEMO_MODE=1           # banner + reset affordance
+MITRA_BIND=127.0.0.1
+MITRA_PORT=8099
+MITRA_TRUST_PROXY=1         # behind the tunnel: meter real client IPs
+MITRA_DAILY_BUDGET_USD=0.30
+MITRA_ADMIN_TOKEN=…         # required for /api/demo/reset (openssl rand -hex 24)
+```
+
+`MITRA_DASHBOARD_TOKEN` remains available if you want to gate the whole
+dashboard behind `?token=…` instead of rate-limiting a public one.
 
 ## Using Nemotron on Nebius Token Factory
 
@@ -101,14 +120,37 @@ The router records every call — model, purpose, tokens, latency, cost — into
 
 ### Honest note about this build
 
-The submitted demo instance runs with `provider: demo`. The Nebius API key available during the build returned `401 Unauthenticated` (verified with a direct `GET /v1/models` against both `api.tokenfactory.nebius.com` and `api.studio.nebius.ai`), so live inference was not demonstrable. Rather than fake it:
+Two things are fictional on the demo instance, and they are labelled:
 
-- the live path is fully implemented and covered by tests with a stubbed client (`tests/test_agent.py`, `tests/test_router.py`);
-- the fallback is a deterministic local composer that reads the *real* ledger — it cannot invent a run, an approval, or a cost;
-- every surface that depends on inference says "Local demo model · no API key";
-- `scripts/smoke_test.py --all` is the first command to run with a valid key.
+- **the seeded history.** Commitments, runs, evidence, sessions and the persona ("Maya Rahman") are written by `demo_data.py`, so you have something to inspect. The banner on every page says so.
+- **the push lane.** The delivery failure you see was seeded; live ntfy delivery needs `NTFY_TOPIC`, so it fails loudly instead of pretending.
 
-Set `NEBIUS_API_KEY` and restart: the router probes the key at startup, flips `provider` to `nebius`, and the same UI runs on Nemotron.
+Everything else is real. The live instance runs `provider: nebius`, and `/api/health` reports it:
+
+```
+$ curl -s https://mitra.pavernor.tech/api/health
+{"ok":true,"version":"0.1.0","provider":"nebius","uptime_s":…}
+```
+
+Chat turns and skill runs hit `nvidia/nemotron-3-super-120b-a12b` (chat) and `nvidia/Nemotron-3-Ultra-550b-a55b` (planning) through Token Factory, and every call's tokens, latency and cost land in the ledger — the Stats view adds up the rows it can show you.
+
+During the build the first API key returned `401 Unauthenticated` on both `api.tokenfactory.nebius.com` and `api.studio.nebius.ai`, so the router was written to *fail visibly*: `probe()` marks the instance degraded, the provider card says "Local demo model", and the fallback is a deterministic composer that reads the real ledger. It cannot invent a run, an approval or a cost. That path is still in the image and still tested — it is what runs if the key dies mid-demo.
+
+### Protecting a public instance that holds a real key
+
+A judged demo has to be clickable by strangers, and a clickable demo holds an API key. The instance is built so the key cannot be spent by one visitor, or by a crowd:
+
+| Control | What it does |
+|---|---|
+| **No route to the app** | The container publishes `127.0.0.1:8099` only; Cloudflare Tunnel is the sole ingress. The port is not reachable from the internet (`connection refused`), so `CF-Connecting-IP` cannot be spoofed and there is no direct-origin bypass. |
+| **Per-client limits** | 4s cooldown between chat turns, 6/hour, 20/day per address. Writes: 15/min. Counters key on the real client IP from `CF-Connecting-IP`, trusted only when `MITRA_TRUST_PROXY=1`. |
+| **A global ceiling** | 40 chat turns/day across *all* addresses and 40 writes/min, so a botnet cycling IPs does not multiply the allowance. |
+| **A hard money ceiling** | `MITRA_DAILY_BUDGET_USD=0.30`, checked before *every* model call — including scheduled skill runs, which use `complete()` rather than `chat()`. When it trips, the reason is shown in the UI. |
+| **Admin actions are gated** | `/api/demo/reset` requires `MITRA_ADMIN_TOKEN` and is hidden in the UI unless you opened the page with `?admin=…` (which trades the secret for an HttpOnly cookie and redirects it out of the URL). A visitor cannot reseed the ledger — which matters, because the daily spend counter is derived from it. |
+| **No key in any response** | A test walks the API and asserts the key string never appears; it lives only in `.env` (mode 600) and the process environment. |
+| **Small surface** | `/api/docs` is off unless `MITRA_ENABLE_DOCS=1`, payloads are capped at 200 kB, chat input at 6000 chars. |
+| **Headers** | CSP (`'self'` plus Cloudflare's RUM beacon), `X-Frame-Options: DENY`, `nosniff`, `no-referrer`, `no-store` on `/api/*`, `no-cache` on the shell and its code. |
+| **Cache-busted code** | `/static/js/app.js?v=<mtime>-<size>`. A CDN that caches per content-encoding once served an old bundle against a new API; the URL now changes exactly when the file does. |
 
 ## The dashboard
 
@@ -146,7 +188,7 @@ Mobile: layout collapses to a single column with a slide-over navigation rail (`
 - **Delivery is separate.** `mark_delivery_failed()` never mutates the run's evidence; the verified artifact survives a delivery failure.
 - **Policy before egress.** Every tool declares risk and egress hosts; `PolicyEngine` checks scheme, host, and private-address resolution through a single HTTP wrapper. Denials are audited, not dropped.
 - **Memory writes need a human.** Chat is read-only against the self-model; consolidation only *proposes*.
-- **Tests.** 46 tests covering ledger invariants, policy/approvals, the agent loop, consolidation, and the HTTP surface. `ruff check` and `ruff format --check` are clean.
+- **Tests.** 63 tests covering ledger invariants, policy/approvals, the agent loop, consolidation, skill shape gates, rate limits, secret non-leakage, and the HTTP surface. `ruff check` and `ruff format --check` are clean.
 
 ## Limitations (deliberate)
 

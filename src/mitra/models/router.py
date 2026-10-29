@@ -255,6 +255,14 @@ class ModelRouter:
                 message_list, purpose=purpose, max_tokens=max_tokens, reason=self._degraded_reason
             )
 
+        # The daily ceiling has to bind here too: skills and scheduled runs use
+        # this path, and a single Ultra planning call costs more than a chat.
+        if self.budget_exceeded():
+            raise BudgetExceeded(
+                f"daily inference budget of ${self.daily_budget_usd:.2f} reached — "
+                "raise MITRA_DAILY_BUDGET_USD or wait for the UTC day to roll over"
+            )
+
         model = self.model_for(purpose)
         kwargs: dict[str, Any] = {
             "model": model,

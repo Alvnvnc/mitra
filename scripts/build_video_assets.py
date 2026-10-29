@@ -6,6 +6,7 @@ Output: .design/video/*.png
 
 from __future__ import annotations
 
+import argparse
 import json
 import pathlib
 from pathlib import Path
@@ -180,11 +181,18 @@ END_HTML = (
 
 
 async def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--base",
+        default="http://127.0.0.1:8099",
+        help="any reachable Mitra instance; used only to serve the self-hosted fonts",
+    )
+    args = parser.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     async with async_playwright() as p:
         browser = await p.chromium.launch(executable_path=CHROME)
         page = await browser.new_page(viewport={"width": 1440, "height": 900})
-        await page.goto(BASE + "/", wait_until="domcontentloaded")
+        await page.goto(args.base + "/", wait_until="domcontentloaded")
 
         await page.set_content(TITLE_HTML)
         await page.wait_for_timeout(500)

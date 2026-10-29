@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from mitra.skills import SkillContext
+from mitra.skills import SkillContext, as_sections
 from mitra.skills.daily_digest import DEFAULT_PARAMS, gather_facts
 
 name = "morning_brief"
@@ -88,7 +88,10 @@ def execute(instruction: Any, context: SkillContext) -> BriefResult:
         "exactly:\n- Status: <one sentence about the ledger state, including any failure>\n"
         "- Selesai: <what actually shipped>\n- Tertunda: <what is blocked or open>\n"
         "- Prioritas: <the single most useful next action>\n"
-        f"Maximum {max_words} words. No greeting, no closing. If a run failed, say it plainly."
+        f"Maximum {max_words} words. No greeting, no closing. If a run failed, say it plainly.\n"
+        "The ledger_status list is authoritative for commitments. The repo_scan key "
+        "describes the code checkout only: if it reports that it is unavailable, "
+        "ignore it — never describe it as a commitment failure."
     )
     user = "Facts (JSON):\n" + json.dumps(facts, ensure_ascii=False, indent=1)
     completion = context.router.complete(
@@ -101,7 +104,7 @@ def execute(instruction: Any, context: SkillContext) -> BriefResult:
         max_tokens=700,
         extra_body={"chat_template_kwargs": {"enable_thinking": False}},
     )
-    summary = (completion.choices[0].message.content or "").strip()
+    summary = as_sections((completion.choices[0].message.content or "").strip())
     if not summary:
         raise RuntimeError("model returned an empty brief")
 
