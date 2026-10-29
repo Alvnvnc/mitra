@@ -141,3 +141,4 @@ Then run the interaction suite against the public URL:
 | `429` on chat | rate limit (4s cooldown, 6/h, 20/day, 40/day global) | wait; the response carries `retry_after_s` |
 | `BudgetExceeded` in a run | `MITRA_DAILY_BUDGET_USD` reached | raise it or wait for the UTC day to roll over |
 | Reset button missing | no admin cookie | open `/?admin=<token>` |
+| `error code: 1010` from Cloudflare | zone browser-integrity check blocks `Python-urllib` user agents | send a normal `User-Agent` from scripts (`scripts/smoke_ui.py` does) |
