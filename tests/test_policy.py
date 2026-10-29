@@ -70,3 +70,38 @@ def test_note_write_cannot_escape_data_dir(env):
     result = toolbox.execute("note_write", {"title": "../../etc/passwd", "body": "x"})
     # Still gated by approval before the path is evaluated.
     assert result.status == "approval_required"
+
+
+def test_artifact_read_lists_then_returns_what_the_run_wrote(env):
+    """Chat must be able to answer "what did the brief actually say?"."""
+    ledger, _selfmodel, _policy, toolbox = env
+    artifacts = ledger.path.parent / "artifacts"
+    artifacts.mkdir(exist_ok=True)
+    (artifacts / "morning-brief-2026-10-29.md").write_text(
+        "# Morning brief\n\n- Status: one scan failed.\n", encoding="utf-8"
+    )
+
+    listing = toolbox.execute("artifact_read", {})
+    assert listing.ok
+    assert [row["name"] for row in listing.data["artifacts"]] == ["morning-brief-2026-10-29.md"]
+
+    read = toolbox.execute("artifact_read", {"name": "morning-brief-2026-10-29.md"})
+    assert read.ok
+    assert "one scan failed" in read.data["text"]
+    assert read.data["truncated"] is False
+
+    missing = toolbox.execute("artifact_read", {"name": "morning-brief.md"})
+    assert missing.ok
+    assert missing.data["error"]
+    assert missing.data["did_you_mean"] == ["morning-brief-2026-10-29.md"]
+
+
+def test_artifact_read_refuses_to_escape_the_artifacts_dir(env):
+    ledger, _selfmodel, _policy, toolbox = env
+    (ledger.path.parent / "artifacts").mkdir(exist_ok=True)
+    secret = ledger.path.parent / "secret.txt"
+    secret.write_text("do not read me", encoding="utf-8")
+
+    result = toolbox.execute("artifact_read", {"name": "../secret.txt"})
+    assert result.status == "denied"
+    assert "do not read me" not in str(result.data)

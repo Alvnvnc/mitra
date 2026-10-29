@@ -24,6 +24,9 @@ from mitra.policy import Decision, PolicyDenied, PolicyEngine, ToolSpec, safe_ch
 
 TAVILY_URL = "https://api.tavily.com/search"
 
+# Enough for a brief plus its facts; a tool result is a context cost, not a file copy.
+MAX_ARTIFACT_CHARS = 8000
+
 TOOL_SPECS: dict[str, ToolSpec] = {
     "web_search": ToolSpec(
         name="web_search",
@@ -64,6 +67,27 @@ TOOL_SPECS: dict[str, ToolSpec] = {
             "evidence check and delivery state. Read-only and authoritative."
         ),
         parameters={"type": "object", "properties": {}, "additionalProperties": False},
+        risk="low",
+    ),
+    "artifact_read": ToolSpec(
+        name="artifact_read",
+        description=(
+            "Read what a run actually produced: the brief or digest Markdown and its facts "
+            "JSON. Call with no arguments first to list the newest artifacts, then call again "
+            "with an exact file name from that list. Never guess a date into a file name. "
+            "Read-only and local to this instance."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "File name from the listing, e.g. morning-brief-2026-10-29.md",
+                },
+                "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 8},
+            },
+            "additionalProperties": False,
+        },
         risk="low",
     ),
     "note_write": ToolSpec(
@@ -353,6 +377,66 @@ class ToolBox:
                 }
             )
         return {"commitments": rows, "count": len(rows)}
+
+    def _tool_artifact_read(
+        self, args: dict[str, Any], *, session_id: str | None = None
+    ) -> dict[str, Any]:
+        """Read a run's output, so chat can answer "what did it actually say?"."""
+        root = safe_child(self.data_dir, "artifacts")
+        if not root.is_dir():
+            return {"artifacts": [], "note": "nothing has been produced yet"}
+
+        name = str(args.get("name") or "").strip()
+        if not name:
+            limit = max(1, min(int(args.get("limit") or 8), 20))
+            files = [
+                path for path in root.iterdir() if path.is_file() and not path.name.startswith(".")
+            ]
+            files.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+            return {
+                "artifacts": [
+                    {
+                        "name": path.name,
+                        "bytes": path.stat().st_size,
+                        "modified": datetime.fromtimestamp(path.stat().st_mtime, tz=UTC).isoformat(
+                            timespec="minutes"
+                        ),
+                    }
+                    for path in files[:limit]
+                ],
+                "count": len(files),
+                "hint": "Read one by exact name; the first row is the most recent file.",
+            }
+
+        path = safe_child(root, name)
+        if not path.is_file():
+            # Suggest by the leading segments of the requested stem, so
+            # "morning-brief.md" still finds "morning-brief-2026-10-29.md".
+            tokens = [part for part in name.rsplit(".", 1)[0].lower().split("-") if part][:3]
+            matches = sorted(
+                candidate.name
+                for candidate in root.iterdir()
+                if candidate.is_file() and all(token in candidate.name.lower() for token in tokens)
+            )[:5]
+            newest = sorted(
+                (candidate for candidate in root.iterdir() if candidate.is_file()),
+                key=lambda candidate: candidate.stat().st_mtime,
+                reverse=True,
+            )[:6]
+            return {
+                "error": f"no artifact named {name!r}",
+                "did_you_mean": matches,
+                "available": [candidate.name for candidate in newest],
+                "hint": "Read one of these exact names, or call with no arguments to list.",
+            }
+
+        text = path.read_text(encoding="utf-8", errors="replace")
+        return {
+            "name": path.name,
+            "bytes": len(text.encode("utf-8")),
+            "truncated": len(text) > MAX_ARTIFACT_CHARS,
+            "text": text[:MAX_ARTIFACT_CHARS],
+        }
 
     def _tool_note_write(
         self, args: dict[str, Any], *, session_id: str | None = None

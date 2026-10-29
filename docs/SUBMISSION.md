@@ -70,14 +70,19 @@ with per-call accounting, and seven dashboard views that show the ledger as it i
 - **Skills** are inspectable units with `execute()` and `verify()`:
   `daily_digest`, `morning_brief`, `commitment_followup`, `research_digest`.
 - **Tools** are the only door to the outside world (`tools.py`): `web_search`
-  (Tavily), `memory_search`, `commitment_status`, `note_write` (medium risk,
+  (Tavily), `memory_search`, `commitment_status`, `artifact_read` (the brief a
+  run actually wrote), `note_write` (medium risk,
   needs approval), `notify_send` (high risk, needs approval). Every spec declares
   risk and egress hosts.
 - **Policy engine** (`policy.py`) checks the allowlist, the risk tier, approval
   state, and the egress host before a single byte leaves the process; denials are
   audited rather than dropped.
 - **Agent** (`agent.py`) is a tool-calling chat loop with retrieval from the self-model
-  and the ledger, a budget guard, and a trace that the UI renders per turn.
+  and the ledger, a budget guard, and a trace that the UI renders per turn. It can
+  read the artifact a run produced, so "what did the brief say?" is answered from
+  the file, not from a memory of the file; if it spends its tool rounds, the last
+  call is a no-tools synthesis, so the turn ends in an answer rather than an
+  apology.
 - **Dashboard** (`web/`) is vanilla ES modules and hand-written CSS with
   self-hosted fonts — no build step, so the whole product is one `docker compose up`.
 - **Models** (`models/router.py`) route by purpose: Nemotron 3 Nano for extraction,
@@ -151,11 +156,13 @@ a degraded demo, never a lying one.
 
 > **A captioned picture track already exists:** `docs/media/demo-walkthrough.mp4`
 > (3:06 including title and end cards, 1440×900, silent with burned-in captions,
-> recorded from the deployed demo). Upload it as-is, or lay the narration below
-> over it — the beats line up with the times in the table. Rebuild it with
-> `python scripts/record_demo.py --out /tmp/demo.webm`, then
-> `python scripts/build_video_assets.py` and
-> `python scripts/mux_demo_video.py --raw /tmp/demo.webm`.
+> recorded against the live instance at <https://mitra.pavernor.tech> — the chat
+> turn in it is a real Nemotron call, labelled `nemotron` with its ledger cost).
+> Upload it as-is, or lay the narration below over it — the beats line up with
+> the times in the table. Rebuild it with
+> `python scripts/record_demo.py --base https://mitra.pavernor.tech --out /tmp/demo.webm`,
+> then `python scripts/build_video_assets.py --base https://mitra.pavernor.tech`
+> and `python scripts/mux_demo_video.py --raw /tmp/demo.webm`.
 
 Screen recording, 1440×900 browser, demo instance running. Speak calmly; do not
 narrate the UI, narrate the *guarantee*.
@@ -195,9 +202,9 @@ visitors.
 | Control | Value |
 |---|---|
 | Chat per visitor | 4 s cooldown, 6/hour, 20/day |
-| Chat across all visitors | 40/day |
+| Chat across all visitors | 80/day |
 | Writes | 15/min per visitor, 40/min globally |
-| Hard spend ceiling | `MITRA_DAILY_BUDGET_USD=0.30`, checked before every model call, scheduled skill runs included |
+| Hard spend ceiling | `MITRA_DAILY_BUDGET_USD=0.50`, checked before every model call, scheduled skill runs included |
 | Admin actions | `/api/demo/reset` needs `MITRA_ADMIN_TOKEN`; the UI hides it unless you open `/?admin=…` (HttpOnly cookie, query string scrubbed) |
 | Key exposure | only in `.env` (mode 600) and the process env; a test walks the API and asserts the key never appears in a response |
 | Surface | `/api/docs` off, 200 kB payload cap, 6 000 char chat cap, CSP + `nosniff` + `DENY` framing |

@@ -26,8 +26,11 @@ class ScriptedRouter:
     def budget_exceeded(self) -> bool:
         return False
 
+    schemas: list[Any] = field(default_factory=list)
+
     def chat(self, *, messages, tool_schemas=None, **kwargs) -> LLMResponse:
         self.calls.append(messages)
+        self.schemas.append(tool_schemas)
         return self.responses.pop(0)
 
 
@@ -94,3 +97,30 @@ def test_empty_model_answer_is_not_fabricated(tmp_path):
     session = agent.new_session("empty")
     reply = agent.reply(session, "hello")
     assert "empty answer" in reply.text
+
+
+def test_exhausted_tool_budget_still_answers_from_what_the_tools_returned(tmp_path):
+    """Running out of rounds must degrade to an answer, not to an apology."""
+    from mitra.agent import MAX_TOOL_ROUNDS
+
+    responses = [
+        LLMResponse(
+            content="",
+            tool_calls=[ToolCall(id=f"call_{index}", name="commitment_status", arguments={})],
+            provider="nebius",
+        )
+        for index in range(MAX_TOOL_ROUNDS)
+    ]
+    responses.append(
+        LLMResponse(content="The brief said the weekly scan failed.", provider="nebius")
+    )
+    agent, ledger, _ = _agent(tmp_path, responses)
+    session = agent.new_session("budget")
+    reply = agent.reply(session, "What did the brief say?")
+
+    assert reply.text == "The brief said the weekly scan failed."
+    assert reply.cost_usd >= 0
+    assert any("closing" in step["label"] for step in reply.trace if step.get("label"))
+    # The closing call must not offer tools again, or it loops.
+    assert agent.router.schemas[-1] == []
+    assert ledger.messages(session)[0].content == reply.text

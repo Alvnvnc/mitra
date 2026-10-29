@@ -43,9 +43,9 @@ MITRA_DEMO_MODE=1                                  # banner + admin reset
 MITRA_BIND=127.0.0.1                               # loopback only
 MITRA_PORT=8099
 MITRA_TRUST_PROXY=1                                # trust CF-Connecting-IP
-MITRA_DAILY_BUDGET_USD=0.30                        # hard money ceiling
+MITRA_DAILY_BUDGET_USD=0.50                        # hard money ceiling
 MITRA_CHAT_PER_HOUR=6  MITRA_CHAT_PER_DAY=20
-MITRA_GLOBAL_CHATS_PER_DAY=40  MITRA_CHAT_COOLDOWN_S=5
+MITRA_GLOBAL_CHATS_PER_DAY=80  MITRA_CHAT_COOLDOWN_S=5
 MITRA_WRITES_PER_MINUTE=15  MITRA_GLOBAL_WRITES_PER_MINUTE=40
 MITRA_ADMIN_TOKEN=…                                # openssl rand -hex 24
 MITRA_TIMEZONE=Asia/Jakarta
@@ -138,7 +138,7 @@ Then run the interaction suite against the public URL:
 | `502` from Cloudflare | container down or wrong port | `docker compose -p mitra ps`, `docker logs mitra` |
 | UI looks like an older version | CDN cached a stale asset | the shell links `app.js?v=<mtime>-<size>`, so bump the file; `Cache-Control: no-cache` is set on `/` and `/static/{js,css}` |
 | Chat answers "local demo model" | key rejected at startup | check `router.degraded_reason` in `/api/bootstrap` |
-| `429` on chat | rate limit (4s cooldown, 6/h, 20/day, 40/day global) | wait; the response carries `retry_after_s` |
+| `429` on chat | rate limit (5s cooldown, 6/h, 20/day per visitor, 80/day global) | wait; the response carries `retry_after_s` |
 | `BudgetExceeded` in a run | `MITRA_DAILY_BUDGET_USD` reached | raise it or wait for the UTC day to roll over |
 | Reset button missing | no admin cookie | open `/?admin=<token>` |
 | `error code: 1010` from Cloudflare | zone browser-integrity check blocks `Python-urllib` user agents | send a normal `User-Agent` from scripts (`scripts/smoke_ui.py` does) |

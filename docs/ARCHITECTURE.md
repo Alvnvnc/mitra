@@ -194,7 +194,8 @@ not change.
 - **Learned skills**: after a complex task the agent can *propose* a playbook draft
   (Markdown) into the inbox; approval saves it for reuse. Generated code is never
   auto-executed — by design.
-- **Tools**: `web_search` (Tavily), `memory_search`, `memory_write` (only via
+- **Tools**: `web_search` (Tavily), `memory_search`, `artifact_read`,
+  `memory_write` (only via
   approved paths), `notes_read`, `scheduler_add`, `notify_send` (ntfy.sh;
   Telegram bot lane optional). Each tool declares required egress hosts and a
   risk level.

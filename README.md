@@ -41,7 +41,7 @@ src/mitra/
   scheduler.py       Due-commitment tick loop (in-process, single user by design).
   policy.py          Policy engine: allowlist, risk tiers, egress hosts, approvals, audit.
   tools.py           The only door to the outside world: web_search, memory_search,
-                     commitment_status, note_write, notify_send.
+                     commitment_status, artifact_read, note_write, notify_send.
   agent.py           Chat loop with tool calls, retrieval, budget guard, trace capture.
   consolidation.py   Nightly memory proposals from the last window — never direct writes.
   skills/            daily_digest, morning_brief, commitment_followup, research_digest.
@@ -52,7 +52,7 @@ src/mitra/
 docker/              Dockerfile entrypoint + Caddyfile for a TLS front door.
 scripts/             serve.py, seed_demo.py, capture_screens.py, record_demo.py,
                      smoke_test.py, demo_vertical_slice.py, run_scheduler.py, ntfy_ping.py.
-tests/               63 tests: ledger invariants, policy, agent, consolidation, skills,
+tests/               67 tests: ledger invariants, policy, agent, consolidation, skills,
                      rate limits, secret handling, HTTP surface.
 docs/                architecture, problem statement, validation plan, media, feedback.
 ```
@@ -81,7 +81,7 @@ cp .env.example .env
 MITRA_DATA_DIR=data/demo MITRA_DEMO_MODE=1 \
   .venv/bin/python scripts/serve.py --port 8080         # dashboard
 .venv/bin/python scripts/run_scheduler.py --once       # one scheduler tick against real skills
-.venv/bin/python -m pytest -q                          # 63 tests
+.venv/bin/python -m pytest -q                          # 67 tests
 ```
 
 ### Deploying it publicly
@@ -99,7 +99,7 @@ MITRA_DEMO_MODE=1           # banner + reset affordance
 MITRA_BIND=127.0.0.1
 MITRA_PORT=8099
 MITRA_TRUST_PROXY=1         # behind the tunnel: meter real client IPs
-MITRA_DAILY_BUDGET_USD=0.30
+MITRA_DAILY_BUDGET_USD=0.50
 MITRA_ADMIN_TOKEN=…         # required for /api/demo/reset (openssl rand -hex 24)
 ```
 
@@ -144,8 +144,8 @@ A judged demo has to be clickable by strangers, and a clickable demo holds an AP
 |---|---|
 | **No route to the app** | The container publishes `127.0.0.1:8099` only; Cloudflare Tunnel is the sole ingress. The port is not reachable from the internet (`connection refused`), so `CF-Connecting-IP` cannot be spoofed and there is no direct-origin bypass. |
 | **Per-client limits** | 4s cooldown between chat turns, 6/hour, 20/day per address. Writes: 15/min. Counters key on the real client IP from `CF-Connecting-IP`, trusted only when `MITRA_TRUST_PROXY=1`. |
-| **A global ceiling** | 40 chat turns/day across *all* addresses and 40 writes/min, so a botnet cycling IPs does not multiply the allowance. |
-| **A hard money ceiling** | `MITRA_DAILY_BUDGET_USD=0.30`, checked before *every* model call — including scheduled skill runs, which use `complete()` rather than `chat()`. When it trips, the reason is shown in the UI. |
+| **A global ceiling** | 80 chat turns/day across *all* addresses and 40 writes/min, so a botnet cycling IPs does not multiply the allowance. |
+| **A hard money ceiling** | `MITRA_DAILY_BUDGET_USD=0.50`, checked before *every* model call — including scheduled skill runs, which use `complete()` rather than `chat()`. When it trips, the reason is shown in the UI. |
 | **Admin actions are gated** | `/api/demo/reset` requires `MITRA_ADMIN_TOKEN` and is hidden in the UI unless you opened the page with `?admin=…` (which trades the secret for an HttpOnly cookie and redirects it out of the URL). A visitor cannot reseed the ledger — which matters, because the daily spend counter is derived from it. |
 | **No key in any response** | A test walks the API and asserts the key string never appears; it lives only in `.env` (mode 600) and the process environment. |
 | **Small surface** | `/api/docs` is off unless `MITRA_ENABLE_DOCS=1`, payloads are capped at 200 kB, chat input at 6000 chars. |
@@ -163,7 +163,7 @@ for real work.
 | View | What it is for |
 |---|---|
 | **Today** | What needs a human decision, what ran, what is broken, latest verified brief |
-| **Chat** | Conversation with retrieval, tool trace, per-turn cost, and a read-only write discipline |
+| **Chat** | Conversation with retrieval, a governed tool trace (including reading the brief a run actually wrote), per-turn cost, and a read-only write discipline |
 | **Commitments** | The delegated work, its schedule, the instruction version in force |
 | **Commitment detail** | Every run, every evidence item with its check result, delivery state, instruction history |
 | **Memory** | Markdown self-model + the approval inbox (diff preview, approve → append, reject → untouched) |
@@ -188,7 +188,7 @@ Mobile: layout collapses to a single column with a slide-over navigation rail (`
 - **Delivery is separate.** `mark_delivery_failed()` never mutates the run's evidence; the verified artifact survives a delivery failure.
 - **Policy before egress.** Every tool declares risk and egress hosts; `PolicyEngine` checks scheme, host, and private-address resolution through a single HTTP wrapper. Denials are audited, not dropped.
 - **Memory writes need a human.** Chat is read-only against the self-model; consolidation only *proposes*.
-- **Tests.** 63 tests covering ledger invariants, policy/approvals, the agent loop, consolidation, skill shape gates, rate limits, secret non-leakage, and the HTTP surface. `ruff check` and `ruff format --check` are clean.
+- **Tests.** 67 tests covering ledger invariants, policy/approvals, the agent loop, consolidation, skill shape gates, rate limits, secret non-leakage, and the HTTP surface. `ruff check` and `ruff format --check` are clean.
 
 ## Limitations (deliberate)
 

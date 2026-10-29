@@ -27,7 +27,7 @@ from mitra.memory.selfmodel import SelfModel
 from mitra.models.router import BudgetExceeded, ModelRouter
 from mitra.tools import ToolBox
 
-MAX_TOOL_ROUNDS = 3
+MAX_TOOL_ROUNDS = 4
 HISTORY_MESSAGES = 8
 
 SYSTEM_TEMPLATE = """You are Mitra, a private, self-hosted personal AI that the user owns.
@@ -41,6 +41,8 @@ HARD RULES
    be proposed to the approval inbox; do not claim you already saved it.
 3. "Done" requires checked evidence. Do not call a commitment successful from
    the fact that it ran; read its evidence and delivery state.
+   If the user asks what a run produced, call artifact_read with no arguments,
+   then read the newest file of that kind by its exact name. Do not invent a date.
 4. Tool calls are governed. If a tool returns approval_required, tell the user
    which dashboard inbox item needs approval. Never claim the action happened.
 5. Never reveal API keys, tokens, or file paths outside the workspace.
@@ -333,16 +335,91 @@ class ChatAgent:
                     }
                 )
 
-        # Tool round budget exhausted: be explicit instead of looping forever.
-        final_text = (
-            "I stopped after three tool rounds without a final answer. The trace is in the "
-            "audit log; ask me to continue and I will narrow the search."
+        # Tool round budget exhausted. Ask once more with tools disabled: the
+        # results are already in the transcript, and an answer built from them
+        # beats an apology. If that call fails too, say so plainly rather than
+        # inventing a summary.
+        messages.append(
+            {
+                "role": "system",
+                "content": (
+                    "Tool budget is spent. Answer the user's question now from the tool "
+                    "results above, in at most 120 words. Quote what you actually read. If "
+                    "part of it is still unknown, say which part is unknown."
+                ),
+            }
         )
-        self.ledger.log_message(
-            session_id, "assistant", final_text, meta={"provider": provider, "trace": trace}
+        emit({"type": "stage", "stage": "model", "round": MAX_TOOL_ROUNDS + 1})
+        final_text = ""
+        try:
+            closing = self.router.chat(
+                purpose="chat",
+                messages=messages,
+                tool_schemas=[],
+                temperature=0.2,
+                max_tokens=600,
+                extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+            )
+        except BudgetExceeded:
+            raise
+        except Exception as exc:  # noqa: BLE001 — same contract as the loop above
+            self.ledger.log_event(
+                "chat_error",
+                detail={"session_id": session_id, "stage": "closing", "error": str(exc)},
+            )
+        else:
+            provider, model = closing.provider, closing.model
+            total_cost += closing.cost_usd
+            trace.append(
+                {
+                    "stage": "model",
+                    "label": (
+                        f"{closing.model} · closing · "
+                        f"{closing.prompt_tokens}+{closing.completion_tokens} tok"
+                    ),
+                    "ms": int((time.perf_counter() - started) * 1000),
+                }
+            )
+            final_text = (closing.content or "").strip()
+
+        if not final_text:
+            final_text = (
+                f"I used all {MAX_TOOL_ROUNDS} tool rounds and could not compose an answer. "
+                "The trace is in the audit log; ask me to continue and I will narrow the search."
+            )
+
+        trace.append(
+            {
+                "stage": "done",
+                "label": f"{provider} · ${total_cost:.4f}"
+                if provider == "nebius"
+                else "local demo model · $0.0000",
+                "ms": int((time.perf_counter() - started) * 1000),
+            }
+        )
+        message_id = self.ledger.log_message(
+            session_id,
+            "assistant",
+            final_text,
+            meta={
+                "provider": provider,
+                "model": model,
+                "cost_usd": total_cost,
+                "sources": sources,
+                "trace": trace,
+            },
         )
         emit({"type": "final", "text": final_text})
-        return ChatReply(session_id, final_text, sources, trace, provider, model, total_cost)
+        return ChatReply(
+            session_id=session_id,
+            text=final_text,
+            sources=sources,
+            trace=trace,
+            provider=provider,
+            model=model,
+            cost_usd=total_cost,
+            message_id=message_id,
+        )
 
 
 def _tool_preview(payload: dict[str, Any]) -> str:
