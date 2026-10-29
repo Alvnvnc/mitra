@@ -44,7 +44,7 @@ from mitra.config import REPO_ROOT, Settings, get_settings
 from mitra.consolidation import decide_proposal, run_consolidation
 from mitra.ledger import Ledger, NotFoundError, iso
 from mitra.memory.selfmodel import DEFAULT_PAGES, SelfModel
-from mitra.models.router import ModelRouter
+from mitra.models.router import BudgetExceeded, ModelRouter
 from mitra.policy import EGRESS_ALLOWLIST
 from mitra.runner import run_commitment_once
 from mitra.scheduler import tick
@@ -370,6 +370,16 @@ def _local(ts: float) -> str:
         .astimezone(ZoneInfo(settings.mitra_timezone))
         .isoformat(timespec="minutes")
     )
+
+
+def _public_error(exc: Exception) -> str:
+    """Error text a stranger may read: no paths, no internals, no stack names."""
+    if isinstance(exc, BudgetExceeded):
+        return (
+            "This shared demo hit its daily inference budget, so chat is paused until "
+            "00:00 UTC. The ledger, the audit log and every other view still work."
+        )
+    return f"{type(exc).__name__}: {str(exc)[:300]}"
 
 
 def _env_flag(name: str, *, default: bool = False) -> bool:
@@ -766,7 +776,7 @@ def create_app(
                     }
                 )
             except Exception as exc:  # noqa: BLE001 — the SSE stream must close cleanly
-                events.put({"type": "error", "error": f"{type(exc).__name__}: {str(exc)[:300]}"})
+                events.put({"type": "error", "error": _public_error(exc)})
             finally:
                 events.put(None)
 

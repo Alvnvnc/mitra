@@ -352,3 +352,14 @@ def test_shell_references_versioned_assets(client):
     html = client.get("/").text
     assert "/static/js/app.js?v=" in html
     assert "/static/css/app.css?v=" in html
+
+
+def test_budget_exhaustion_is_explained_in_plain_language():
+    """A visitor should see why chat stopped, not a class name."""
+    from mitra.models.router import BudgetExceeded
+    from mitra.web.app import _public_error
+
+    message = _public_error(BudgetExceeded("daily inference budget of $0.30 reached"))
+    assert "budget" in message
+    assert "BudgetExceeded" not in message
+    assert "UTC" in message
