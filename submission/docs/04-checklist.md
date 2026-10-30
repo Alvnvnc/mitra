@@ -57,8 +57,12 @@ Follow [`03-youtube.md`](03-youtube.md).
 ## 3. Fill the story (10 minutes)
 
 - [ ] Paste [`02-about-the-project.md`](02-about-the-project.md) into **About the project**
+      (text-only by design — the field cannot host images). If the editor turns
+      out to render external images, [`02b-about-with-images.md`](02b-about-with-images.md)
+      is the same story with four absolute image URLs, no upload needed.
 - [ ] Upload the nine gallery images in the order listed in
-      [`01-devpost-fields.md`](01-devpost-fields.md), each with its caption
+      [`01-devpost-fields.md`](01-devpost-fields.md), each with its caption, so the
+      story's "see the gallery" references land somewhere
 - [ ] Add the video URL from step 1
 - [ ] Add "Try it out" links: demo, repository, feedback write-up
 - [ ] Add the **Built with** tags

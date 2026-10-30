@@ -20,7 +20,8 @@ Nothing here needs editing except the YouTube URL once the video is up.
 3. **[docs/01-devpost-fields.md](docs/01-devpost-fields.md)** — every form field,
    character counts included.
 4. **[docs/02-about-the-project.md](docs/02-about-the-project.md)** — the long
-   story to paste, with markers for where each image goes.
+   story to paste. Text-only on purpose: Devpost's story field renders Markdown but
+   cannot host images, so the screenshots go in the gallery instead.
 5. **[docs/05-devpost-form-answers.md](docs/05-devpost-form-answers.md)** — the
    survey fields: model choice, ratings with justification, Tavily answer, AI
    tools, and the repo/demo compliance mapping.
@@ -31,7 +32,8 @@ Nothing here needs editing except the YouTube URL once the video is up.
 submission/
 ├── docs/
 │   ├── 01-devpost-fields.md        name, pitch (179 chars), links, tags, media order
-│   ├── 02-about-the-project.md     the story: why, what, how, Nemotron, lessons
+│   ├── 02-about-the-project.md     the story: why, what, how, Nemotron, lessons (text-only)
+│   ├── 02b-about-with-images.md    same story with inline images (only if the editor renders them)
 │   ├── 03-youtube.md               title, description, chapters, settings
 │   ├── 04-checklist.md             runbook + verification commands
 │   └── 05-devpost-form-answers.md  survey answers: models, ratings, Tavily, AI tools

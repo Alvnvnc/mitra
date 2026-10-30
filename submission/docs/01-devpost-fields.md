@@ -54,7 +54,10 @@ with the project name underneath, so it still reads at thumbnail size.
 
 ## Gallery / media order
 
-Upload in this order; the first image is what judges see first in the gallery.
+Devpost's **About the project** field is Markdown only — it cannot host images, so
+the story in `02-about-the-project.md` is deliberately text-only and refers to
+"the gallery on this page". Upload the screenshots separately in the project's
+media/gallery section, in this order. The first image is what judges see first.
 
 | # | File | Caption to paste |
 |---|---|---|
