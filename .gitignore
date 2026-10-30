@@ -34,3 +34,5 @@ docs/media/*.mp4
 
 # Design references (third-party screenshots, not redistributed)
 .design/
+# Submission video: generated, and hosted on YouTube for the judges.
+submission/video/*.mp4

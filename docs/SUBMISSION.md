@@ -1,11 +1,14 @@
 # Devpost submission — copy, links, and the walkthrough video
 
-Everything below is ready to paste.
+> **The submission package is [`submission/`](../submission/README.md).** That
+> folder holds the paste-ready field copy, the gallery, the 2:56 video cut and
+> the upload sheets. This file keeps the longer-form context, the video beat
+> sheet and the deployment notes.
 
 - **Demo:** <https://mitra.pavernor.tech> — seeded synthetic history, **live Nemotron inference** through Nebius Token Factory
 - **Repository:** https://github.com/Alvnvnc/mitra
 - **Track:** Personal AI
-- **Video:** 3:06 (title card + captioned walkthrough + end card), structure below
+- **Video:** 2:56 (title card + captioned walkthrough + end card), structure below
 
 ---
 
@@ -152,10 +155,10 @@ a degraded demo, never a lying one.
 
 ---
 
-# Walkthrough script (3:06)
+# Walkthrough script (2:56 cut)
 
-> **A captioned picture track already exists:** `docs/media/demo-walkthrough.mp4`
-> (3:06 including title and end cards, 1440×900, silent with burned-in captions,
+> **A captioned picture track already exists:** `submission/video/mitra-demo.mp4`
+> (2:56 including title and end cards, 1440×900, silent with burned-in captions,
 > recorded against the live instance at <https://mitra.pavernor.tech> — the chat
 > turn in it is a real Nemotron call, labelled `nemotron` with its ledger cost).
 > Upload it as-is, or lay the narration below over it — the beats line up with
@@ -170,15 +173,15 @@ narrate the UI, narrate the *guarantee*.
 | Time | On screen | Say |
 |---|---|---|
 | 0:00–0:02 | Title card | "Mitra: delegated work, verified." |
-| 0:02–0:13 | Today view, hero + "4 things need you" | "This is Mitra. It runs recurring work for me and it proves what happened. Right now four things need a human decision — and it says so without me asking. The history is seeded; the inference underneath is live Nemotron." |
-| 0:13–0:31 | Scroll to needs-you, click **View notice** | "This commitment ran, passed its evidence check, produced a verified artifact — and then delivery failed. Mitra records `delivery_failed`, writes a notice, and keeps the result. Delivery is a separate stage from execution, by design." |
-| 0:31–0:46 | Commitments → open *Morning research brief* | "Every commitment is one unit of delegated work: a schedule, a skill, and exactly one instruction version in force." |
-| 0:46–1:28 | Runs table, evidence counts, instruction history | "Every run carries evidence. Two checks: the artifact exists, and it has the required sections. Green means both passed. The red row is real — the skill demanded three bullets, the artifact had two, and the gate refused to call it done. And instructions are versions: v3 becomes effective tomorrow. Tomorrow's run picks it up; today's cannot. That is enforced in the scheduler, not in a prompt." |
-| 1:28–1:57 | Memory view → reject a proposal | "Chat cannot write memory. Consolidation proposes a change, with the diff and the source message ids. If I reject, the page stays byte-identical. Approving appends one bullet. The model never decides what it remembers." |
-| 1:57–2:32 | Chat → new conversation → "Did yesterday's brief actually deliver?" → expand the trace | "Chat reads the real ledger, retrieves the memory pages it used, calls tools through the policy layer, and shows the sources, the trace and the cost of the turn. Note the labels: `nemotron`, the model id, and six hundredths of a cent — that number is a row in the ledger, not an estimate. This is live Nemotron on Nebius." |
-| 2:32–2:46 | Audit → filter **denied** | "Every decision is here, including the refused ones. `web_fetch` was denied for a private address; `run_shell` for not being on the allowlist; a memory write because chat is read-only. A security claim you can't audit isn't a security claim." |
-| 2:46–3:02 | Stats view | "Cost, reliability, interventions, and calls by model — measured per call, not estimated. This is what 'always-on and trustworthy' has to look like: a ledger you can read, and a system that tells on itself." |
-| 3:02–3:06 | End card | — |
+| 0:02–0:12 | Today view, hero + "4 things need you" | "This is Mitra. It runs recurring work for me and it proves what happened. Right now four things need a human decision — and it says so without me asking. The history is seeded; the inference underneath is live Nemotron." |
+| 0:12–0:29 | Scroll to needs-you, click **View notice** | "This commitment ran, passed its evidence check, produced a verified artifact — and then delivery failed. Mitra records `delivery_failed`, writes a notice, and keeps the result. Delivery is a separate stage from execution, by design." |
+| 0:29–0:44 | Commitments → open *Morning research brief* | "Every commitment is one unit of delegated work: a schedule, a skill, and exactly one instruction version in force." |
+| 0:44–1:23 | Runs table, evidence counts, instruction history | "Every run carries evidence. Two checks: the artifact exists, and it has the required sections. Green means both passed. The red row is real — the skill demanded three bullets, the artifact had two, and the gate refused to call it done. And instructions are versions: v3 becomes effective tomorrow. Tomorrow's run picks it up; today's cannot. That is enforced in the scheduler, not in a prompt." |
+| 1:23–1:51 | Memory view → reject a proposal | "Chat cannot write memory. Consolidation proposes a change, with the diff and the source message ids. If I reject, the page stays byte-identical. Approving appends one bullet. The model never decides what it remembers." |
+| 1:51–2:24 | Chat → new conversation → "Did yesterday's brief actually deliver?" → expand the trace | "Chat reads the real ledger, retrieves the memory pages it used, calls tools through the policy layer, and shows the sources, the trace and the cost of the turn. Note the labels: `nemotron`, the model id, and six hundredths of a cent — that number is a row in the ledger, not an estimate. This is live Nemotron on Nebius." |
+| 2:24–2:37 | Audit → filter **denied** | "Every decision is here, including the refused ones. `web_fetch` was denied for a private address; `run_shell` for not being on the allowlist; a memory write because chat is read-only. A security claim you can't audit isn't a security claim." |
+| 2:37–2:52 | Stats view | "Cost, reliability, interventions, and calls by model — measured per call, not estimated. This is what 'always-on and trustworthy' has to look like: a ledger you can read, and a system that tells on itself." |
+| 2:52–2:56 | End card | — |
 
 ## Closing line
 
@@ -187,7 +190,8 @@ own. It is a partner that keeps its promises in writing."
 
 ## Thumbnail
 
-`docs/media/today.png`, cropped to the hero: "4 things need you." on warm paper,
+`submission/images/devpost-thumbnail.png` (1440×960): the Today view with the
+project name beneath it. `docs/media/today.png` also works, cropped to the hero:
 with the delivery-failure banner visible. No text overlay needed; the type is the
 design. The video title card (`.design/video/title.png`) works as a fallback.
 
@@ -232,7 +236,7 @@ banner stays either way, because the seeded commitments are still synthetic.
 - [x] Demo live on a real domain over HTTPS, no token needed to click through: <https://mitra.pavernor.tech>
 - [x] `provider: nebius` confirmed in `/api/health` with a real key
 - [x] Rate limits, spend ceiling and the admin gate exercised against the public URL
-- [ ] Video uploaded (YouTube/Vimeo, public or unlisted) — `docs/media/demo-walkthrough.mp4`
+- [ ] Video uploaded (YouTube, public) — `submission/video/mitra-demo.mp4`
 - [ ] Repository public, README first screen has a screenshot and the one-command run
 - [ ] `docs/FEEDBACK.md` linked in the submission (feedback bonus)
 - [ ] Built-with tags include: `nvidia`, `nemotron`, `nebius`, `cloudflare`, `fastapi`, `sqlite`

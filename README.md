@@ -1,5 +1,9 @@
 # Mitra
 
+[![MIT License](https://img.shields.io/badge/license-MIT-1c5a41)](LICENSE)
+[![Live demo](https://img.shields.io/badge/demo-mitra.pavernor.tech-1c5a41)](https://mitra.pavernor.tech)
+[![Track](https://img.shields.io/badge/NVIDIA%20%C3%97%20Nebius-Personal%20AI-16150f)](https://nebiusglobalaihackathon.devpost.com/)
+
 **A private, always-on personal AI that keeps its promises in writing.**
 
 Built for the [NVIDIA × Nebius Global AI Hackathon](https://nebiusglobalaihackathon.devpost.com/) — **Personal AI Track**.
@@ -52,7 +56,7 @@ src/mitra/
 docker/              Dockerfile entrypoint + Caddyfile for a TLS front door.
 scripts/             serve.py, seed_demo.py, capture_screens.py, record_demo.py,
                      smoke_test.py, demo_vertical_slice.py, run_scheduler.py, ntfy_ping.py.
-tests/               67 tests: ledger invariants, policy, agent, consolidation, skills,
+tests/               68 tests: ledger invariants, policy, agent, consolidation, skills,
                      rate limits, secret handling, HTTP surface.
 docs/                architecture, problem statement, validation plan, media, feedback.
 ```
@@ -81,7 +85,7 @@ cp .env.example .env
 MITRA_DATA_DIR=data/demo MITRA_DEMO_MODE=1 \
   .venv/bin/python scripts/serve.py --port 8080         # dashboard
 .venv/bin/python scripts/run_scheduler.py --once       # one scheduler tick against real skills
-.venv/bin/python -m pytest -q                          # 67 tests
+.venv/bin/python -m pytest -q                          # 68 tests
 ```
 
 ### Deploying it publicly
@@ -188,7 +192,7 @@ Mobile: layout collapses to a single column with a slide-over navigation rail (`
 - **Delivery is separate.** `mark_delivery_failed()` never mutates the run's evidence; the verified artifact survives a delivery failure.
 - **Policy before egress.** Every tool declares risk and egress hosts; `PolicyEngine` checks scheme, host, and private-address resolution through a single HTTP wrapper. Denials are audited, not dropped.
 - **Memory writes need a human.** Chat is read-only against the self-model; consolidation only *proposes*.
-- **Tests.** 67 tests covering ledger invariants, policy/approvals, the agent loop, consolidation, skill shape gates, rate limits, secret non-leakage, and the HTTP surface. `ruff check` and `ruff format --check` are clean.
+- **Tests.** 68 tests covering ledger invariants, policy/approvals, the agent loop, consolidation, skill shape gates, rate limits, secret non-leakage, and the HTTP surface. `ruff check` and `ruff format --check` are clean.
 
 ## Limitations (deliberate)
 
