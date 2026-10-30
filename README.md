@@ -122,6 +122,28 @@ Three purposes, three models, one router (`src/mitra/models/router.py`):
 
 The router records every call — model, purpose, tokens, latency, cost — into the ledger, so the **Stats** view is a measurement, not an estimate. A daily budget ceiling (`MITRA_DAILY_BUDGET_USD`) stops runaway spend and surfaces the reason in the UI.
 
+**How Token Factory accelerated the build.** The endpoint is OpenAI-compatible,
+so the official `openai` client pointed at
+`https://api.tokenfactory.nebius.com/v1/` worked with no shim: tool calling,
+usage accounting and `finish_reason` arrived exactly where the client expects
+them. That is what made a three-tier router practical in one file — swapping
+between Nano, Super and Ultra is a model-id string, not an integration. It also
+made cost measurable: every call's tokens and dollars land in the ledger, which
+is why the Stats view can show **$0.07 across 40 calls** rather than an estimate,
+and why a public demo can run under a **$0.50/day** ceiling.
+
+### Nebius services used
+
+| Service | Used? | Why |
+|---|---|---|
+| **Token Factory** (inference API) | **yes** | All model calls: chat, tool calling, planning, extraction |
+| Nebius AI Cloud GPU instances | no | Inference is managed; the dashboard runs on a small VPS |
+| Nebius Serverless Endpoints / Jobs | no | Worth it for consolidation at scale; a single VM is enough here |
+
+No other Nebius service was required, so none is claimed. Everything besides
+inference — scheduler, policy, ledger, evidence gate, dashboard — is this
+repository, running in one container.
+
 ### Honest note about this build
 
 Two things are fictional on the demo instance, and they are labelled:

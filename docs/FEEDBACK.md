@@ -120,6 +120,26 @@ instead of guessing.
   streams its own SSE and calls the model without `stream=True`), so we make no
   claim either way.
 
+### How Nemotron 3 Super compares on our own tasks
+
+Three tasks from Mitra's workload, same prompts and settings, three Token Factory
+models, one prompt per task (n=1 — directional, not a benchmark). Reproduce with
+`python scripts/compare_models.py`.
+
+| Model | Tool call | 4-section brief | Grounding | Latency | Completion tokens |
+|---|---|---|---|---|---|
+| `nemotron-3-super-120b-a12b` | pass | pass, 54 words | pass | 1.1–1.85 s | 31 / 105 / 54 |
+| `DeepSeek-V4.1-Flash` | pass (0.72 s) | pass, 31 words | pass | 0.72–1.71 s | 42 / 442 / 201 |
+| `Qwen3.5-397B-A17B` | pass | pass, 41 words | fail (named the risk, not the cause) | 0.99–1.64 s | 16 / 83 / 49 |
+
+Tool calling with valid JSON arguments is table stakes across all three. The
+differences that mattered to us: Nemotron spent a quarter of DeepSeek's completion
+tokens on the structured brief (105 vs 442), and it explained *why* the right
+commitment was at risk. DeepSeek matched it on quality and was faster on the tool
+call. On this sample we would not claim Nemotron is better — we would claim it is
+the cheapest of the three per useful answer, which is why it is the default for
+chat and tool calls in Mitra.
+
 ---
 
 ## NVIDIA Nemotron

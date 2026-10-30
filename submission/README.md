@@ -21,6 +21,9 @@ Nothing here needs editing except the YouTube URL once the video is up.
    character counts included.
 4. **[docs/02-about-the-project.md](docs/02-about-the-project.md)** — the long
    story to paste, with markers for where each image goes.
+5. **[docs/05-devpost-form-answers.md](docs/05-devpost-form-answers.md)** — the
+   survey fields: model choice, ratings with justification, Tavily answer, AI
+   tools, and the repo/demo compliance mapping.
 
 ## What is in the folder
 
@@ -30,7 +33,8 @@ submission/
 │   ├── 01-devpost-fields.md        name, pitch (179 chars), links, tags, media order
 │   ├── 02-about-the-project.md     the story: why, what, how, Nemotron, lessons
 │   ├── 03-youtube.md               title, description, chapters, settings
-│   └── 04-checklist.md             runbook + verification commands
+│   ├── 04-checklist.md             runbook + verification commands
+│   └── 05-devpost-form-answers.md  survey answers: models, ratings, Tavily, AI tools
 ├── images/
 │   ├── devpost-thumbnail.png       1440×960 (3:2), real Today view + wordmark
 │   ├── 01-today.png                gallery, in display order

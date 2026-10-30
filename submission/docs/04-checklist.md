@@ -63,6 +63,9 @@ Follow [`03-youtube.md`](03-youtube.md).
 - [ ] Add "Try it out" links: demo, repository, feedback write-up
 - [ ] Add the **Built with** tags
 - [ ] Paste the feedback paragraph (the rules ask for feedback explicitly)
+- [ ] Fill the survey fields from [`05-devpost-form-answers.md`](05-devpost-form-answers.md):
+      models and why, quality 8/10, recommend 9/10, experience 9/10, Tavily **No**,
+      AI tools, learning level
 - [ ] If asked about pre-existing work: use the "nothing to declare" block
 
 ## 4. Final read-through (5 minutes)
