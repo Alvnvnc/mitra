@@ -190,10 +190,11 @@ own. It is a partner that keeps its promises in writing."
 
 ## Thumbnail
 
-`submission/images/devpost-thumbnail.png` (1440×960): the Today view with the
-project name beneath it. `docs/media/today.png` also works, cropped to the hero:
-with the delivery-failure banner visible. No text overlay needed; the type is the
-design. The video title card (`.design/video/title.png`) works as a fallback.
+`submission/images/devpost-thumbnail.png` (1440×960, 3:2): the real Today view
+with the project name beneath it. `docs/media/today.png` also works, cropped to
+the hero ("4 things need you", with the delivery-failure banner visible) — the
+type is the design. The video title card (`.design/video/title.png`) is a
+fallback.
 
 ## How the public instance is protected
 
