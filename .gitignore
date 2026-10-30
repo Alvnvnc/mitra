@@ -36,3 +36,6 @@ docs/media/*.mp4
 .design/
 # Submission video: generated, and hosted on YouTube for the judges.
 submission/video/*.mp4
+
+# Handy zip of the Devpost package (contains the video)
+mitra-devpost-submission.zip
